@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>第 1 章：认识 JavaScript 与开发环境 · JavaScript 零基础入门</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<script type="module" src="../../assets/app.js"></script>
+</head>
+<body>
+<header class="site-header"><a class="brand" href="../../">JavaScript 零基础入门</a></header>
+<main>
+  <p class="eyebrow">第 1 章</p>
+  <h1>认识 JavaScript 与开发环境</h1>
+  <p class="lead">本页所有示例都可以直接修改并运行，也可以按 <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 运行。</p>
+  <p class="note">这里的运行环境只显示 <code>console</code> 的输出，不会像浏览器控制台那样自动显示表达式的结果，所以想看计算结果，要用 <code>console.log</code> 打印出来。</p>
+
+  <h2 id="first-line">1. 第一行代码</h2>
+  <p><code>console.log</code> 会把括号里的内容打印出来，它是你接下来最常用的工具。点「运行」试试：</p>
+  <div class="playground" data-key="ch01-hello" data-title="第一行代码">
+<script type="text/plain">
+console.log("Hello, JavaScript!");
+</script>
+  </div>
+
+  <h2 id="calc">2. 字符串与计算</h2>
+  <p>JavaScript 可以做算术，引号括起来的内容叫字符串，两个字符串可以用 <code>+</code> 拼起来。第 2 章会详细讲。</p>
+  <div class="playground" data-key="ch01-calc" data-title="计算与拼接">
+<script type="text/plain">
+console.log(1 + 2);
+console.log("Java" + "Script");
+</script>
+  </div>
+  <p>代码末尾的分号 <code>;</code> 表示一条语句结束。JavaScript 允许省略它，但本课程统一写上，避免新手踩坑。</p>
+
+  <h2 id="in-html">3. 在网页里使用 JavaScript</h2>
+  <p>真实项目里，JavaScript 写在网页中，用 <code>&lt;script&gt;</code> 标签引入，有内联和外部文件两种写法。下面是一个完整的例子：</p>
+  <p class="file-label">index.html</p>
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="zh-CN"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8" /&gt;
+  &lt;title&gt;第一个页面&lt;/title&gt;
+  &lt;script src="main.js" defer&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;你好&lt;/h1&gt;
+
+  &lt;script&gt;
+    console.log("来自内联脚本");
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+  <p class="file-label">main.js</p>
+<pre><code>console.log("来自 main.js");</code></pre>
+  <p><a href="demo/" target="_blank" rel="noopener">在新标签页打开这个示例页面</a>，按 <kbd>F12</kbd> 打开开发者工具，切到 Console，会看到两行输出：先是内联脚本的，后是 <code>main.js</code> 的，因为带 <code>defer</code> 的脚本要等页面解析完才执行。</p>
+  <p>浏览器从上到下解析 HTML，脚本执行时，它下面的元素还没创建出来。所以要么把 <code>&lt;script&gt;</code> 放在 <code>&lt;/body&gt;</code> 之前，要么放在 <code>&lt;head&gt;</code> 里并加上 <code>defer</code>。本课程默认采用后一种。</p>
+
+  <h2 id="console">4. 用 console 调试</h2>
+  <p>不同的 <code>console</code> 方法在控制台里的颜色和用途不同。运行下面的代码，对比四种输出：</p>
+  <div class="playground" data-key="ch01-console" data-title="console 的几种输出">
+<script type="text/plain">
+console.log("普通信息");
+console.warn("警告：这个值可能有问题");
+console.error("错误：出问题了");
+console.table([
+  { name: "Ann", age: 20 },
+  { name: "Bob", age: 25 },
+]);
+</script>
+  </div>
+
+  <h2 id="errors">5. 读懂报错</h2>
+  <p>程序出错时，会打印红色的报错。读报错的诀窍是先看冒号前的错误类型，再看后面的描述。下面三段代码都是故意写错的，运行后看看各是什么错误，再动手改对。具体措辞会因浏览器而异。</p>
+  <div class="playground" data-key="ch01-err-reference" data-title="ReferenceError：使用了不存在的变量">
+<script type="text/plain">
+consle.log("我把 console 拼错了");
+</script>
+  </div>
+  <div class="playground" data-key="ch01-err-syntax" data-title="SyntaxError：语法写错，代码无法解析">
+<script type="text/plain">
+console.log("引号没有闭合);
+</script>
+  </div>
+  <div class="playground" data-key="ch01-err-type" data-title="TypeError：把不是函数的东西当函数调用">
+<script type="text/plain">
+const name = "Ann";
+name();
+</script>
+  </div>
+
+  <h2 id="exercises">6. 课后练习</h2>
+  <p>三道题由易到难，建议都亲手敲一遍，卡住了再看参考答案。</p>
+
+  <h3>练习一：打印你的名字</h3>
+  <p>用 <code>console.log</code> 打印 <code>你好，我是</code> 加上你的名字。</p>
+  <div class="playground" data-key="ch01-ex1" data-title="练习一">
+<script type="text/plain">
+// 在这里写代码
+</script>
+  </div>
+  <details>
+    <summary>参考答案</summary>
+<pre><code>console.log("你好，我是 Ann");</code></pre>
+  </details>
+
+  <h3>练习二：时间换算</h3>
+  <p>算出 3 小时 20 分钟等于多少分钟，用 <code>console.log</code> 打印出来。</p>
+  <div class="playground" data-key="ch01-ex2" data-title="练习二">
+<script type="text/plain">
+// 在这里写代码
+</script>
+  </div>
+  <details>
+    <summary>参考答案</summary>
+<pre><code>console.log(3 * 60 + 20); // 200</code></pre>
+  </details>
+
+  <h3>练习三：三种输出与一次故意的错误</h3>
+  <p>在 <code>main.js</code> 里用 <code>log</code>、<code>warn</code>、<code>error</code> 各打印一句话，确认三种颜色不同；再故意把 <code>console</code> 拼成 <code>consle</code>，说出报的是哪种错误。先在下面的编辑器里试，再照第 3 节的做法，在自己电脑上新建 <code>index.html</code> 和 <code>main.js</code> 验证一遍。</p>
+  <div class="playground" data-key="ch01-ex3" data-title="练习三">
+<script type="text/plain">
+// 在这里写代码
+</script>
+  </div>
+  <details>
+    <summary>参考答案</summary>
+<pre><code>console.log("这是普通信息");
+console.warn("这是警告");
+console.error("这是错误");
+
+consle.log("拼错了"); // ReferenceError: consle is not defined</code></pre>
+    <p>拼错的变量名会触发 <code>ReferenceError</code>，因为 JavaScript 找不到叫 <code>consle</code> 的东西。</p>
+  </details>
+
+  <nav class="pager" aria-label="章节导航">
+    <a href="../../">← 课程首页</a>
+    <span class="soon">下一章：变量与数据类型（编写中）</span>
+  </nav>
+</main>
+</body>
+</html>
