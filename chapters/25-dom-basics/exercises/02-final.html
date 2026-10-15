@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 25-2 · Final: Find Your Way Around a Menu</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 25-2" data-mode="dom">
+    <template class="html">
+      <nav id="menu">
+        <section>
+          <h2>Account</h2>
+          <ul>
+            <li><a href="#profile"><span class="icon">👤</span> Profile</a></li>
+            <li><a href="#billing"><span class="icon">💳</span> Billing</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Help</h2>
+          <ul>
+            <li><a href="#docs"><span class="icon">📘</span> Docs</a></li>
+            <li><a href="#contact"><span class="icon">✉️</span> Contact</a></li>
+            <li><a href="#status"><span class="icon">📈</span> Status</a></li>
+          </ul>
+        </section>
+      </nav>
+    </template>
+    <script type="text/plain" class="code">
+      // A click can land on any element inside a menu item, even the icon <span>.
+      // describe(target) should return, for the menu item that contains `target`:
+      // { section: 'Help', position: 2, of: 3, previous: 'Docs', next: 'Status' }
+      // (position counts from 1; previous / next are null at the ends; texts without the icon)
+      const label = (li) => li?.querySelector('a').lastChild.data.trim() ?? null;
+
+      function describe(target) {
+        const li = target.closest('li');                       // works from the <li> itself or anything inside it
+        const items = [...li.parentElement.children];
+        return {
+          section: li.closest('section').querySelector('h2').textContent,
+          position: items.indexOf(li) + 1,
+          of: items.length,
+          previous: label(li.previousElementSibling),
+          next: label(li.nextElementSibling),
+        };
+      }
+
+      const icon = document.querySelector('a[href="#contact"] .icon');
+      console.log(describe(icon));
+    </script>
+    <script type="text/plain" class="tests">
+      const $ = (s) => document.querySelector(s);
+      test('from an icon in the middle', () => assert.deepEqual(describe($('a[href="#contact"] .icon')), { section: 'Help', position: 2, of: 3, previous: 'Docs', next: 'Status' }));
+      test('from a link at the start', () => assert.deepEqual(describe($('a[href="#profile"]')), { section: 'Account', position: 1, of: 2, previous: null, next: 'Billing' }));
+      test('from an <li> at the end', () => assert.deepEqual(describe($('a[href="#status"]').parentElement), { section: 'Help', position: 3, of: 3, previous: 'Contact', next: null }));
+    </script>
+  </div>
+</body>
+</html>

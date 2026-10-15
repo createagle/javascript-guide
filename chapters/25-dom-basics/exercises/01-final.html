@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 25-1 · Final: Collect a Table of Contents</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 25-1" data-mode="dom">
+    <template class="html">
+      <article id="doc">
+        <h1>Guide</h1>
+        <h2 id="install">Install</h2>
+        <p>…</p>
+        <h3 id="npm">With npm</h3>
+        <h3 id="cdn">From a CDN</h3>
+        <h2 id="usage">Usage</h2>
+        <h3 id="basics">Basics</h3>
+        <h2 id="faq">FAQ <small>(updated)</small></h2>
+      </article>
+    </template>
+    <script type="text/plain" class="code">
+      // outline(article) should return the h2 headings of the article, in order, each with its h3s:
+      // [{ id: 'install', text: 'Install', children: [{ id: 'npm', text: 'With npm', children: [] }, …] }, …]
+      // Use the text of the heading itself, without the text of a <small> inside it.
+      function headingText(heading) {
+        // Only the heading's own text nodes, so <small>(updated)</small> is left out
+        return [...heading.childNodes]
+          .filter((node) => node.nodeType === Node.TEXT_NODE)
+          .map((node) => node.data)
+          .join('')
+          .trim();
+      }
+
+      function outline(article) {
+        const result = [];
+        // One query in document order; an h3 belongs to the last h2 before it
+        for (const heading of article.querySelectorAll('h2, h3')) {
+          const item = { id: heading.id, text: headingText(heading), children: [] };
+          if (heading.tagName === 'H2') result.push(item);
+          else result.at(-1)?.children.push(item);
+        }
+        return result;
+      }
+
+      console.log(JSON.stringify(outline(document.querySelector('#doc')), null, 2));
+    </script>
+    <script type="text/plain" class="tests">
+      const toc = outline(document.querySelector('#doc'));
+      test('three sections, in order', () => assert.deepEqual(toc.map((s) => s.id), ['install', 'usage', 'faq']));
+      test('h3s go under their h2', () => {
+        assert.deepEqual(toc[0].children.map((s) => s.text), ['With npm', 'From a CDN']);
+        assert.deepEqual(toc[1].children.map((s) => s.id), ['basics']);
+        assert.deepEqual(toc[2].children, []);
+      });
+      test('the heading text leaves out <small>', () => assert.equal(toc[2].text, 'FAQ'));
+      test('the h1 is not included', () => assert.ok(!toc.some((s) => s.text === 'Guide')));
+    </script>
+  </div>
+</body>
+</html>

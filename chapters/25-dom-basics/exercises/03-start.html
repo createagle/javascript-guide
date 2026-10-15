@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 25-3 · Start: Read and Write Widget Settings</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 25-3" data-mode="dom">
+    <template class="html">
+      <div class="widget" id="feed" data-max-items="5" data-source="/api/news" aria-expanded="false">News</div>
+      <div class="widget is-compact" id="weather" data-max-items="3" aria-expanded="true">Weather</div>
+    </template>
+    <script type="text/plain" class="code">
+      // readSettings(el) returns { source, maxItems, compact, expanded } from the element:
+      //   source: data-source (null when missing), maxItems: data-max-items as a number,
+      //   compact: whether it has the class is-compact, expanded: aria-expanded as a boolean
+      // setExpanded(el, open) updates aria-expanded and toggles the class is-open to match.
+      function readSettings(el) {
+        return {
+          source: el.dataset.source,
+          maxItems: el.dataset.maxItems,
+          compact: el.className === 'is-compact',
+          expanded: el.getAttribute('aria-expanded'),
+        };
+      }
+      function setExpanded(el, open) {
+        el.ariaExpanded = open;
+      }
+
+      console.log(readSettings(document.querySelector('#feed')), readSettings(document.querySelector('#weather')));
+    </script>
+    <script type="text/plain" class="tests">
+      const feed = document.querySelector('#feed');
+      const weather = document.querySelector('#weather');
+      test('reads the feed', () => assert.deepEqual(readSettings(feed), { source: '/api/news', maxItems: 5, compact: false, expanded: false }));
+      test('reads the weather', () => assert.deepEqual(readSettings(weather), { source: null, maxItems: 3, compact: true, expanded: true }));
+      test('opens and closes', () => {
+        setExpanded(feed, true);
+        assert.equal(feed.getAttribute('aria-expanded'), 'true');
+        assert.ok(feed.classList.contains('is-open'));
+        assert.equal(readSettings(feed).expanded, true);
+        setExpanded(feed, false);
+        assert.equal(feed.getAttribute('aria-expanded'), 'false');
+        assert.ok(!feed.classList.contains('is-open'));
+      });
+      test('other classes are kept', () => {
+        setExpanded(weather, true);
+        assert.ok(weather.classList.contains('widget') && weather.classList.contains('is-compact'));
+      });
+    </script>
+  </div>
+</body>
+</html>

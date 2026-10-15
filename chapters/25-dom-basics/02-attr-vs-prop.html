@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>25-2 Attributes vs Properties</title>
+  <style>
+    .subjects, .table-wrap { width: min(820px, 100%); }
+    .subjects { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; font-size: 14px; }
+    .subjects label { display: flex; align-items: center; gap: 6px; }
+    .subjects input:not([type="checkbox"]) { font: inherit; width: 7em; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+    .card { padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px; }
+    .card.is-open { border-color: currentColor; font-weight: 600; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card { color: #c4a5ff !important; } }
+    :root[data-theme="dark"] .card { color: #c4a5ff !important; }
+    #actions .btn { font: 12px var(--mono); }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    thead th { font-size: 12px; color: var(--muted); }
+    tbody th { font-weight: 400; }
+    td { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+    td.changed { animation: flash 1s ease-out; }
+    @keyframes flash { from { background: color-mix(in srgb, var(--warn) 35%, transparent); } }
+    @media (prefers-reduced-motion: reduce) { td.changed { animation: none; } }
+  </style>
+</head>
+<body class="demo">
+  <form class="panel subjects" id="form">
+    <label>Name <input id="name" value="Ada"></label>
+    <label><input type="checkbox" id="agree" checked> I agree</label>
+    <label>Items <input type="number" id="count" value="5" min="0"></label>
+    <a id="link" href="docs/intro?lang=en">A relative link</a>
+    <div id="card" class="card" data-user-id="7" style="color: rebeccapurple" aria-expanded="false">A card</div>
+  </form>
+  <div class="controls" id="actions">
+    <button class="btn" type="button" data-action="setAttr">name.setAttribute('value', 'Grace')</button>
+    <button class="btn" type="button" data-action="reset">form.reset()</button>
+    <button class="btn" type="button" data-action="toggle">card.classList.toggle('is-open')</button>
+    <button class="btn" type="button" data-action="dataset">card.dataset.userId = 8</button>
+  </div>
+  <div class="panel table-wrap">
+    <table>
+      <thead><tr><th scope="col">Expression</th><th scope="col">Result</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const name = $('name'), agree = $('agree'), count = $('count'), link = $('link'), card = $('card');
+
+    // Each row: the code shown, and a function that runs exactly that code
+    const ROWS = [
+      ["name.getAttribute('value')", () => name.getAttribute('value')],
+      ['name.value', () => name.value],
+      ['name.defaultValue', () => name.defaultValue],
+      ["agree.getAttribute('checked')", () => agree.getAttribute('checked')],
+      ['agree.checked', () => agree.checked],
+      ['count.value', () => count.value],
+      ['count.valueAsNumber', () => count.valueAsNumber],
+      ["link.getAttribute('href')", () => link.getAttribute('href')],
+      ['link.href', () => link.href],
+      ["card.getAttribute('data-user-id')", () => card.getAttribute('data-user-id')],
+      ['card.dataset.userId', () => card.dataset.userId],
+      ['card.className', () => card.className],
+      ["card.classList.contains('is-open')", () => card.classList.contains('is-open')],
+      ['card.style.color', () => card.style.color],
+      ['getComputedStyle(card).color', () => getComputedStyle(card).color],
+      ["card.getAttribute('aria-expanded')", () => card.getAttribute('aria-expanded')],
+    ];
+    const format = (v) => (typeof v === 'string' ? `'${v}'` : String(v));
+    const cells = ROWS.map(([code]) => {
+      const tr = document.createElement('tr');
+      const th = Object.assign(document.createElement('th'), { scope: 'row' });
+      th.append(Object.assign(document.createElement('code'), { textContent: code }));
+      const td = document.createElement('td');
+      tr.append(th, td);
+      $('rows').append(tr);
+      return td;
+    });
+    function update() {
+      ROWS.forEach(([, read], i) => {
+        const text = format(read());
+        if (cells[i].textContent !== text) {
+          cells[i].textContent = text;
+          cells[i].classList.remove('changed');
+          void cells[i].offsetWidth;          // restart the highlight animation
+          cells[i].classList.add('changed');
+        }
+      });
+    }
+
+    const ACTIONS = {
+      setAttr: () => name.setAttribute('value', 'Grace'),
+      reset: () => $('form').reset(),
+      toggle: () => {
+        const open = card.classList.toggle('is-open');
+        card.setAttribute('aria-expanded', String(open));
+      },
+      dataset: () => { card.dataset.userId = 8; },
+    };
+    $('actions').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      ACTIONS[button.dataset.action]();
+      update();
+    });
+    $('form').addEventListener('input', update);
+    $('form').addEventListener('change', update);
+    $('form').addEventListener('click', (event) => { if (event.target === link) event.preventDefault(); });
+    update();
+  </script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>25-1 DOM Tree Explorer</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; width: min(960px, 100%); align-items: start; }
+    .sample { border: 1px dashed var(--border); border-radius: 8px; padding: 4px 14px; }
+    .sample h2 { font-size: 18px; margin: 10px 0; }
+    .sample p { margin: 8px 0; }
+    .sample ul { display: flex; gap: 6px; padding: 0; list-style: none; }
+    .sample li { padding: 2px 10px; border-radius: 999px; background: var(--surface); }
+    .sample .is-match { outline: 2px solid var(--warn); outline-offset: 2px; }
+    .sample .is-selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .query { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 14px; font: 13px var(--mono); }
+    .query input { font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); width: 10em; flex: 1 1 8em; min-width: 0; }
+    .query .btn { margin-left: 6px; }
+    .found { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+    .found.bad { color: var(--bad); }
+    .tree-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
+    .ws { font-weight: 400; display: flex; align-items: center; gap: 4px; }
+    .tree, .tree ul { list-style: none; margin: 0; padding-left: 14px; }
+    .tree { padding-left: 0; font: 12px/1.6 var(--mono); }
+    .tree ul { border-left: 1px solid var(--border); }
+    .node { font: inherit; background: none; border: 0; padding: 0 4px; border-radius: 4px; cursor: pointer; color: var(--fg); text-align: left; overflow-wrap: anywhere; }
+    .node.t3 { color: var(--muted); }
+    .node.t8 { color: var(--good); }
+    .node.match { background: color-mix(in srgb, var(--warn) 25%, transparent); }
+    .node.selected { background: var(--accent); color: var(--accent-fg); }
+    .info { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font: 12px var(--mono); }
+    .info dt { color: var(--muted); }
+    .info dd { margin: 0; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <div class="panel">
+      <p class="label">The page fragment</p>
+      <div class="sample" id="sample">
+        <article id="post" class="post" data-id="42">
+          <!-- An article about the DOM -->
+          <h2>The DOM</h2>
+          <p class="lead">Every tag becomes an <em>element</em> node.</p>
+          <ul class="tags">
+            <li><a href="#html">HTML</a></li>
+            <li class="active"><a href="#dom">DOM</a></li>
+            <li><a href="#css">CSS</a></li>
+          </ul>
+          <p>Text between tags becomes <strong>text nodes</strong>, even blank ones.</p>
+        </article>
+      </div>
+      <form class="query" id="query">
+        <label for="selector">document.querySelectorAll(</label>
+        <input id="selector" value="li a" spellcheck="false" autocomplete="off">
+        <span>)</span>
+        <button class="btn" type="submit">Run</button>
+      </form>
+      <p class="found" id="found" aria-live="polite"></p>
+    </div>
+    <div class="panel">
+      <p class="label tree-head">Node tree
+        <label class="ws"><input type="checkbox" id="ws"> show whitespace text nodes</label></p>
+      <ul class="tree" id="tree"></ul>
+      <dl class="info" id="info"></dl>
+    </div>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const root = $('post');
+    const nodes = [];                 // index → node, so a tree button can find its node
+    let selected = root;
+    const TYPES = { 1: 'ELEMENT_NODE', 3: 'TEXT_NODE', 8: 'COMMENT_NODE' };
+
+    const isBlank = (node) => node.nodeType === Node.TEXT_NODE && !node.data.trim();
+    function label(node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const id = node.id ? `#${node.id}` : '';
+        const classes = [...node.classList].filter((c) => !c.startsWith('is-'));   // leave out this page's own markers
+        const cls = classes.length ? `.${classes.join('.')}` : '';
+        return `<${node.localName}${id}${cls}>`;
+      }
+      if (node.nodeType === Node.TEXT_NODE) return `#text "${node.data.replace(/\n/g, '⏎').replace(/ /g, '·')}"`;
+      return `<!--${node.data}-->`;
+    }
+
+    // Build the tree from childNodes, so text and comment nodes show up too
+    function build(node, showBlank) {
+      const li = document.createElement('li');
+      const button = Object.assign(document.createElement('button'), { type: 'button', textContent: label(node) });
+      button.dataset.index = nodes.push(node) - 1;
+      button.className = `node t${node.nodeType}`;
+      li.append(button);
+      const kids = [...node.childNodes].filter((child) => showBlank || !isBlank(child));
+      if (kids.length) {
+        const ul = document.createElement('ul');
+        for (const child of kids) ul.append(build(child, showBlank));
+        li.append(ul);
+      }
+      return li;
+    }
+    function render() {
+      nodes.length = 0;
+      $('tree').replaceChildren(build(root, $('ws').checked));
+      mark();
+    }
+
+    // Describe the selected node with the properties this chapter is about
+    const show = (n) => (n ? label(n) : 'null');
+    function describe(node) {
+      const rows = [
+        ['nodeType', `${node.nodeType} (${TYPES[node.nodeType]})`],
+        ['nodeName', node.nodeName],
+        ['parentNode', show(node.parentNode)],
+        ['childNodes.length', node.childNodes.length],
+      ];
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        rows.push(
+          ['children.length', node.children.length],
+          ['firstElementChild', show(node.firstElementChild)],
+          ['previousElementSibling', show(node.previousElementSibling)],
+        );
+      }
+      rows.push(
+        ['previousSibling', show(node.previousSibling)],
+        ['nextSibling', show(node.nextSibling)],
+        ['textContent', JSON.stringify(node.textContent.trim().replace(/\s+/g, ' ').slice(0, 60))],
+      );
+      $('info').replaceChildren(...rows.flatMap(([k, v]) => [
+        Object.assign(document.createElement('dt'), { textContent: k }),
+        Object.assign(document.createElement('dd'), { textContent: v }),
+      ]));
+    }
+
+    let matches = [];
+    function mark() {
+      for (const el of $('sample').querySelectorAll('.is-selected, .is-match')) el.classList.remove('is-selected', 'is-match');
+      const el = selected.nodeType === Node.ELEMENT_NODE ? selected : selected.parentElement;
+      el.classList.add('is-selected');
+      for (const m of matches) m.classList.add('is-match');
+      for (const button of $('tree').querySelectorAll('button')) {
+        const node = nodes[button.dataset.index];
+        button.classList.toggle('selected', node === selected);
+        button.classList.toggle('match', matches.includes(node));
+      }
+      describe(selected);
+    }
+
+    // One listener for the whole tree: event delegation (chapter 27)
+    $('tree').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-index]');
+      if (!button) return;
+      selected = nodes[button.dataset.index];
+      mark();
+    });
+    $('ws').addEventListener('change', render);
+    $('query').addEventListener('submit', (event) => {
+      event.preventDefault();
+      try {
+        // Search only inside the fragment; an invalid selector throws a SyntaxError
+        matches = [...$('sample').querySelectorAll($('selector').value)];
+        $('found').textContent = `${matches.length} element(s) match, in document order.`;
+        $('found').className = 'found';
+      } catch (error) {
+        matches = [];
+        $('found').textContent = `${error.name}: ${error.message}`;
+        $('found').className = 'found bad';
+      }
+      mark();
+    });
+    render();
+    $('query').requestSubmit();
+  </script>
+</body>
+</html>
