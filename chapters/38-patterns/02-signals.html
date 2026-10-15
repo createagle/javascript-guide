@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>38-2 Mini Signals</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; width: min(760px, 100%); align-items: start; }
+    .order { display: grid; gap: 10px; }
+    .field { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+    .field input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 0; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .totals { display: grid; grid-template-columns: auto 1fr; gap: 2px 16px; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+    .totals dt { color: var(--muted); }
+    .totals dd { margin: 0; text-align: right; font-weight: 600; }
+    .note { margin: 0; font-size: 13px; color: var(--muted); }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    .graph { display: grid; gap: 10px; }
+    .graph .label { margin: 0; }
+    .nodes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font: 13px var(--mono); }
+    .nodes li { padding: 6px 10px; border-radius: 8px; background: var(--surface); color: var(--muted); }
+    .nodes li.hit { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <form class="panel order" id="form">
+      <label class="field">Price ($) <input type="number" id="price" min="0" step="0.5" value="12"></label>
+      <label class="field">Quantity <input type="number" id="qty" min="0" step="1" value="3"></label>
+      <label class="check"><input type="checkbox" id="member"> Member: 10% off</label>
+      <dl class="totals">
+        <dt>Subtotal</dt><dd id="subtotal-out"></dd>
+        <dt>Discount</dt><dd id="discount-out"></dd>
+        <dt>Total</dt><dd id="total-out"></dd>
+      </dl>
+      <p class="note" id="shipping"></p>
+      <div class="buttons">
+        <button class="btn" type="button" id="both">Set price and quantity at once</button>
+        <button class="btn" type="button" id="read">Read total 3 times</button>
+      </div>
+    </form>
+    <section class="panel graph" aria-labelledby="graph-title">
+      <h2 class="label" id="graph-title">What ran after the last change</h2>
+      <ul class="nodes" id="nodes"></ul>
+      <p class="note" id="summary" role="status"></p>
+    </section>
+  </div>
+  <script type="module">
+    import { signal, computed, effect } from './signals.js';
+
+    const $ = (id) => document.getElementById(id);
+    const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+    // Count how often each computed and effect runs, to show what a change touches
+    const NAMES = ['subtotal', 'discount', 'total', 'render', 'shipping'];
+    let runs = [];
+    const ran = (name) => runs.push(name);
+
+    // State
+    const price = signal(12);
+    const qty = signal(3);
+    const member = signal(false);
+
+    // Derived state
+    const subtotal = computed(() => { ran('subtotal'); return price.value * qty.value; });
+    const discount = computed(() => { ran('discount'); return member.value ? subtotal.value * 0.1 : 0; });
+    const total = computed(() => { ran('total'); return subtotal.value - discount.value; });
+
+    // Effects: the only code that touches the DOM
+    effect(() => {
+      ran('render');
+      $('subtotal-out').textContent = money.format(subtotal.value);
+      $('discount-out').textContent = `−${money.format(discount.value)}`;
+      $('total-out').textContent = money.format(total.value);
+    });
+    effect(() => {
+      ran('shipping');
+      const missing = 50 - total.value;
+      $('shipping').textContent = missing <= 0 ? 'Free shipping!' : `Add ${money.format(missing)} more for free shipping`;
+    });
+
+    // Show the runs once the effects have flushed (they wait for a microtask)
+    function report(what) {
+      setTimeout(() => {
+        $('nodes').replaceChildren(...NAMES.map((name) => {
+          const count = runs.filter((n) => n === name).length;
+          const li = document.createElement('li');
+          li.className = count ? 'hit' : '';
+          li.textContent = `${name}: ${count ? `ran ${count}×` : 'cached'}`;
+          return li;
+        }));
+        $('summary').textContent = what;
+        runs = [];
+      });
+    }
+
+    // Inputs only write signals; they never update the page themselves
+    $('form').addEventListener('input', (event) => {
+      if (event.target.id === 'price') price.value = event.target.valueAsNumber || 0;
+      if (event.target.id === 'qty') qty.value = event.target.valueAsNumber || 0;
+      if (event.target.id === 'member') member.value = event.target.checked;
+      report(`Changed ${event.target.id}.`);
+    });
+    $('both').addEventListener('click', () => {
+      price.value = 20;
+      qty.value = 2;
+      $('price').value = 20;
+      $('qty').value = 2;
+      report('Two signals changed in a row: each effect still ran once.');
+    });
+    $('read').addEventListener('click', () => {
+      const reads = [total.value, total.value, total.value];
+      report(`Read total 3 times (${money.format(reads[0])}): nothing had changed, so nothing ran.`);
+    });
+    $('form').addEventListener('submit', (event) => event.preventDefault());
+    report('First run: every computed and effect ran once.');
+  </script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 38-2 · Start: A Store with Immutable Updates</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 38-2">
+    <script type="text/plain" class="code">
+      // createStore(reducer, initialState) returns { getState, dispatch, subscribe }:
+      // - dispatch(action) replaces the state with reducer(state, action); if the new state is a different
+      //   object (!==), every listener is called
+      // - subscribe(listener) returns a function that unsubscribes it
+      //
+      // todos(state, action) is a reducer for { items: [{ id, text, done }], nextId, filter }. It never changes
+      // the state it is given (the tests freeze it): it returns a new state, sharing everything that did not change.
+      //   { type: 'add', text }         adds { id: nextId, text, done: false } and increases nextId
+      //   { type: 'toggle', id }        flips done of that item
+      //   { type: 'remove', id }        removes that item
+      //   { type: 'filter', filter }    sets filter ('all', 'active' or 'done')
+      //   any other action              returns the same state object
+      const initial = { items: [], nextId: 1, filter: 'all' };
+      function createStore(reducer, initialState) {
+        let state = initialState;
+        const listeners = [];
+        return {
+          getState: () => state,
+          dispatch(action) {
+            state = reducer(state, action);
+            listeners.forEach((listener) => listener());
+          },
+          subscribe(listener) {
+            listeners.push(listener);
+          },
+        };
+      }
+
+      function todos(state, action) {
+        switch (action.type) {
+          case 'add':
+            state.items.push({ id: state.nextId++, text: action.text, done: false });
+            return state;
+          case 'toggle': {
+            const item = state.items.find((t) => t.id === action.id);
+            item.done = !item.done;
+            return state;
+          }
+          default:
+            return state;
+        }
+      }
+
+      const store = createStore(todos, initial);
+      store.subscribe(() => console.log(store.getState().items.map((t) => `${t.done ? '✓' : '·'} ${t.text}`).join('  ')));
+      store.dispatch({ type: 'add', text: 'Write tests' });
+      store.dispatch({ type: 'add', text: 'Ship it' });
+      store.dispatch({ type: 'toggle', id: 1 });
+    </script>
+    <script type="text/plain" class="tests">
+      const deepFreeze = (value) => {
+        if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+          Object.freeze(value);
+          Object.values(value).forEach(deepFreeze);
+        }
+        return value;
+      };
+      const run = (...actions) => actions.reduce((state, action) => todos(deepFreeze(state), action), initial);
+
+      test('add appends an item and never mutates', () => {
+        const state = run({ type: 'add', text: 'a' }, { type: 'add', text: 'b' });
+        assert.deepEqual(state.items, [{ id: 1, text: 'a', done: false }, { id: 2, text: 'b', done: false }]);
+        assert.equal(state.nextId, 3);
+        assert.deepEqual(initial, { items: [], nextId: 1, filter: 'all' });
+      });
+      test('toggle replaces only the item that changed', () => {
+        const before = run({ type: 'add', text: 'a' }, { type: 'add', text: 'b' });
+        const after = todos(deepFreeze(before), { type: 'toggle', id: 2 });
+        assert.equal(after.items[1].done, true);
+        assert.ok(after.items[0] === before.items[0], 'the untouched item should be the same object');
+        assert.ok(after.items !== before.items, 'the items array should be a new array');
+      });
+      test('remove and filter', () => {
+        const state = run({ type: 'add', text: 'a' }, { type: 'add', text: 'b' }, { type: 'remove', id: 1 }, { type: 'filter', filter: 'done' });
+        assert.deepEqual(state.items.map((t) => t.text), ['b']);
+        assert.equal(state.filter, 'done');
+      });
+      test('an unknown action returns the very same state', () => {
+        const state = deepFreeze(run({ type: 'add', text: 'a' }));
+        assert.ok(todos(state, { type: 'nothing' }) === state);
+      });
+      test('the store notifies listeners only when the state changes', () => {
+        const store = createStore((state, action) => deepFreeze(todos(state, action)), initial);
+        let calls = 0;
+        store.subscribe(() => calls++);
+        store.dispatch({ type: 'add', text: 'a' });
+        store.dispatch({ type: 'unknown' });
+        assert.equal(calls, 1);
+        assert.equal(store.getState().items.length, 1);
+      });
+      test('subscribe returns an unsubscribe function', () => {
+        const store = createStore(todos, initial);
+        let calls = 0;
+        const unsubscribe = store.subscribe(() => calls++);
+        assert.equal(typeof unsubscribe, 'function', 'subscribe should return a function');
+        unsubscribe();
+        store.dispatch({ type: 'add', text: 'a' });
+        assert.equal(calls, 0);
+      });
+    </script>
+  </div>
+</body>
+</html>

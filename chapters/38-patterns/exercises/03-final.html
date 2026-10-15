@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 38-3 · Final: Curry, Pipe and Memoize</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 38-3">
+    <script type="text/plain" class="code">
+      // Three small tools for functional code:
+      // - curry(fn) collects arguments over several calls until it has fn.length of them, then calls fn:
+      //   curry((a, b, c) => a + b + c)(1)(2)(3), (1, 2)(3) and (1)(2, 3) all give 6.
+      //   Each partial function can be reused: calling it twice must not mix up the arguments.
+      // - pipe(...fns) returns a function that passes its argument through fns from left to right;
+      //   pipe() with no functions returns its argument unchanged
+      // - memoize(fn, key = (first) => first) remembers fn's results by key, so fn runs once per key
+      //   (results that are undefined are remembered too); the returned function has a .cache property (a Map)
+      function curry(fn) {
+        // Keep the arguments in a new array on every call, so partial functions never share them
+        const collect = (args) => (...more) => {
+          const all = [...args, ...more];
+          return all.length >= fn.length ? fn(...all) : collect(all);
+        };
+        return collect([]);
+      }
+
+      function pipe(...fns) {
+        return (value) => fns.reduce((acc, fn) => fn(acc), value);
+      }
+
+      function memoize(fn, key = (first) => first) {
+        const cache = new Map();   // any value can be a key, and has() tells "not cached" from "cached undefined"
+        function memoized(...args) {
+          const k = key(...args);
+          if (!cache.has(k)) cache.set(k, fn.apply(this, args));
+          return cache.get(k);
+        }
+        memoized.cache = cache;
+        return memoized;
+      }
+
+      const add = curry((a, b) => a + b);
+      const multiply = curry((a, b) => a * b);
+      const tax = pipe(multiply(1.2), Math.round);
+      console.log(tax(100), tax(42));
+
+      const slowSquare = memoize((n) => { console.log(`computing ${n}²`); return n * n; });
+      console.log(slowSquare(9), slowSquare(9), add(1)(2));
+    </script>
+    <script type="text/plain" class="tests">
+      test('curry: one argument at a time, or several', () => {
+        const sum3 = curry((a, b, c) => a + b + c);
+        assert.equal(sum3(1)(2)(3), 6);
+        assert.equal(sum3(1, 2)(3), 6);
+        assert.equal(sum3(1)(2, 3), 6);
+        assert.equal(sum3(1, 2, 3), 6);
+      });
+      test('curry: partial functions can be reused', () => {
+        const add = curry((a, b) => a + b);
+        const add10 = add(10);
+        assert.equal(add10(1), 11);
+        assert.equal(add10(2), 12);
+        assert.equal(add(1)(1), 2);
+      });
+      test('pipe runs from left to right', () => {
+        const f = pipe((x) => x + 1, (x) => x * 10, String);
+        assert.equal(f(1), '20');
+        assert.equal(pipe()(7), 7);
+      });
+      test('memoize runs fn once per key', () => {
+        let calls = 0;
+        const square = memoize((n) => { calls++; return n * n; });
+        assert.equal(square(4), 16);
+        assert.equal(square(4), 16);
+        assert.equal(square(5), 25);
+        assert.equal(calls, 2);
+        assert.ok(square.cache instanceof Map, 'cache should be a Map');
+      });
+      test('memoize remembers falsy results too', () => {
+        let calls = 0;
+        const f = memoize((n) => { calls++; return n > 0 ? undefined : 0; });
+        f(1); f(1); f(-1); f(-1);
+        assert.equal(calls, 2);
+      });
+      test('memoize: a key function for several arguments, and object keys', () => {
+        let calls = 0;
+        const area = memoize((w, h) => { calls++; return w * h; }, (w, h) => `${w}x${h}`);
+        assert.equal(area(2, 3), 6);
+        assert.equal(area(3, 2), 6);
+        assert.equal(area(2, 3), 6);
+        assert.equal(calls, 2);
+        const size = memoize((obj) => Object.keys(obj).length);
+        const a = { x: 1 };
+        const b = { y: 1, z: 2 };
+        assert.equal(size(a), 1);
+        assert.equal(size(b), 2, 'two different objects must not share one cache entry');
+      });
+    </script>
+  </div>
+</body>
+</html>

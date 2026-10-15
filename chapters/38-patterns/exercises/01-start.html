@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 38-1 · Start: An Event Emitter</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 38-1">
+    <script type="text/plain" class="code">
+      // class Emitter, like a small Node.js EventEmitter:
+      // - on(type, listener) adds a listener and returns a function that removes it;
+      //   adding the same listener twice for a type has no effect (like addEventListener)
+      // - once(type, listener): the listener runs on the next emit only; off(type, listener) can still remove it
+      // - off(type, listener) removes a listener (removing one that is not there does nothing)
+      // - emit(type, ...args) calls the listeners of type in the order they were added, then the '*' listeners
+      //   with (type, ...args); it returns true if any listener ran.
+      //   Listeners added or removed during an emit take effect from the next emit.
+      class Emitter {
+        listeners = {};
+
+        on(type, listener) {
+          (this.listeners[type] ??= []).push(listener);
+          return () => this.off(type, listener);
+        }
+
+        once(type, listener) {
+          this.on(type, listener);
+        }
+
+        off(type, listener) {}
+
+        emit(type, ...args) {
+          for (const listener of this.listeners[type]) listener(...args);
+        }
+      }
+
+      const chat = new Emitter();
+      const stop = chat.on('message', (text, from) => console.log(`${from}: ${text}`));
+      chat.once('message', () => console.log('(first message!)'));
+      chat.on('*', (type) => console.log(`[log] ${type}`));
+      chat.emit('message', 'Hi there', 'Ada');
+      stop();
+      console.log(chat.emit('message', 'Anyone?', 'Ada'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('on, emit and the returned unsubscribe function', () => {
+        const e = new Emitter();
+        const got = [];
+        const off = e.on('add', (a, b) => got.push(a + b));
+        assert.equal(e.emit('add', 1, 2), true);
+        off();
+        assert.equal(e.emit('add', 3, 4), false);
+        assert.deepEqual(got, [3]);
+      });
+      test('listeners run in order, and one listener is only added once', () => {
+        const e = new Emitter();
+        const got = [];
+        const a = () => got.push('a');
+        e.on('x', a);
+        e.on('x', () => got.push('b'));
+        e.on('x', a);
+        e.emit('x');
+        assert.deepEqual(got, ['a', 'b']);
+      });
+      test('emit with no listeners returns false instead of throwing', () => {
+        assert.equal(new Emitter().emit('nothing'), false);
+      });
+      test('once runs a single time, even if it emits again', () => {
+        const e = new Emitter();
+        let count = 0;
+        e.once('ping', () => { count++; e.emit('ping'); });
+        e.emit('ping');
+        e.emit('ping');
+        assert.equal(count, 1);
+      });
+      test('off removes a once listener by its original function', () => {
+        const e = new Emitter();
+        let count = 0;
+        const listener = () => count++;
+        e.once('ping', listener);
+        e.off('ping', listener);
+        e.emit('ping');
+        assert.equal(count, 0);
+      });
+      test("'*' listeners get every event with its type", () => {
+        const e = new Emitter();
+        const got = [];
+        e.on('*', (type, ...args) => got.push([type, ...args]));
+        e.emit('a', 1);
+        e.emit('b');
+        assert.deepEqual(got, [['a', 1], ['b']]);
+      });
+      test('changes during an emit apply from the next emit', () => {
+        const e = new Emitter();
+        const got = [];
+        let offB;
+        e.on('x', () => { got.push('a'); offB(); e.on('x', () => got.push('c')); });
+        offB = e.on('x', () => got.push('b'));
+        e.emit('x');
+        assert.deepEqual(got, ['a', 'b'], 'b was removed during the emit, but still runs this time; c waits');
+        e.emit('x');
+        assert.deepEqual(got, ['a', 'b', 'a', 'c']);
+      });
+    </script>
+  </div>
+</body>
+</html>

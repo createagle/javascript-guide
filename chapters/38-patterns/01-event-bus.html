@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>38-1 Event Bus</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(860px, 100%); align-items: start; }
+    .shop { display: grid; gap: 12px; }
+    .shop-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+    .shop-head h2 { margin: 0; font-size: 17px; }
+    .badge { padding: 2px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-fg); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .products { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .products li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--surface); }
+    #clear { justify-self: start; }
+    .toast { margin: 0; min-height: 1.5em; font-size: 14px; color: var(--good); font-weight: 600; }
+    .monitor { display: grid; gap: 10px; }
+    .monitor .label { margin: 0; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 6px 10px 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; min-width: 0; font-size: 14px; }
+    legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px; }
+    .check { display: flex; align-items: center; gap: 6px; }
+    .stats { margin: 0; font-size: 13px; color: var(--muted); }
+    .log { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; min-height: 120px; align-content: start; font-size: 12px; }
+    .log li { padding: 4px 8px; border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+    .log code { font-size: 12px; }
+    .log .to { display: block; color: var(--muted); font-family: var(--mono); }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <section class="panel shop" aria-labelledby="shop-title">
+      <div class="shop-head">
+        <h2 id="shop-title">Shop</h2>
+        <span class="badge" id="badge" aria-live="polite">Cart: 0 · $0.00</span>
+      </div>
+      <ul class="products" id="products"></ul>
+      <button class="btn" type="button" id="clear">Empty the cart</button>
+      <p class="toast" id="toast" role="status"></p>
+    </section>
+    <section class="panel monitor" aria-labelledby="monitor-title">
+      <h2 id="monitor-title" class="label">Event bus</h2>
+      <fieldset>
+        <legend>Subscribed modules</legend>
+        <label class="check"><input type="checkbox" data-module="notifications" checked> Notifications</label>
+        <label class="check"><input type="checkbox" data-module="analytics" checked> Analytics</label>
+      </fieldset>
+      <p class="stats" id="stats">Analytics: 0 events</p>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </section>
+  </div>
+  <script type="module">
+    // A tiny publish/subscribe bus: modules talk through it and never import each other
+    class EventBus {
+      #handlers = new Map();   // event type → Set of handlers
+
+      on(type, handler) {
+        if (!this.#handlers.has(type)) this.#handlers.set(type, new Set());
+        this.#handlers.get(type).add(handler);
+        return () => this.#handlers.get(type).delete(handler);   // call it to unsubscribe
+      }
+
+      emit(type, detail) {
+        // Copy first: a handler may subscribe or unsubscribe while we are looping
+        const handlers = [...(this.#handlers.get(type) ?? [])];
+        for (const handler of handlers) handler(detail);
+        this.onEmit?.(type, detail, handlers);
+      }
+    }
+
+    const bus = new EventBus();
+    const $ = (id) => document.getElementById(id);
+    const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+    // ---- Products module: only knows how to publish "cart:add" ----
+    const PRODUCTS = [
+      { id: 1, name: 'Notebook', price: 4.5 },
+      { id: 2, name: 'Pen', price: 1.25 },
+      { id: 3, name: 'Backpack', price: 32 },
+    ];
+    $('products').append(...PRODUCTS.map((product) => {
+      const li = document.createElement('li');
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: 'Add' });
+      button.dataset.id = product.id;
+      button.setAttribute('aria-label', `Add ${product.name}`);
+      li.append(Object.assign(document.createElement('span'), { textContent: `${product.name} · ${money.format(product.price)}` }), button);
+      return li;
+    }));
+    $('products').addEventListener('click', (event) => {
+      const id = Number(event.target.closest('button')?.dataset.id);
+      const product = PRODUCTS.find((p) => p.id === id);
+      if (product) bus.emit('cart:add', product);
+    });
+    $('clear').addEventListener('click', () => bus.emit('cart:clear'));
+
+    // ---- Cart module: owns the cart, announces every change ----
+    const cart = [];
+    bus.on('cart:add', function addToCart(product) {
+      cart.push(product);
+      bus.emit('cart:changed', { count: cart.length, total: cart.reduce((sum, p) => sum + p.price, 0) });
+    });
+    bus.on('cart:clear', function emptyCart() {
+      cart.length = 0;
+      bus.emit('cart:changed', { count: 0, total: 0 });
+    });
+
+    // ---- Badge module ----
+    bus.on('cart:changed', function updateBadge({ count, total }) {
+      $('badge').textContent = `Cart: ${count} · ${money.format(total)}`;
+    });
+
+    // ---- Notifications and analytics: can be switched off without touching anything else ----
+    let toastTimer;
+    function showToast(product) {
+      $('toast').textContent = `${product.name} added to your cart`;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { $('toast').textContent = ''; }, 2000);
+    }
+    let tracked = 0;
+    function track() {
+      tracked++;
+      $('stats').textContent = `Analytics: ${tracked} event${tracked === 1 ? '' : 's'}`;
+    }
+    const MODULES = {
+      notifications: () => bus.on('cart:add', showToast),
+      analytics: () => {
+        const offs = ['cart:add', 'cart:clear'].map((type) => bus.on(type, track));
+        return () => offs.forEach((off) => off());
+      },
+    };
+    const unsubscribe = {};
+    for (const [name, subscribe] of Object.entries(MODULES)) unsubscribe[name] = subscribe();
+    document.querySelector('fieldset').addEventListener('change', (event) => {
+      const name = event.target.dataset.module;
+      if (event.target.checked) unsubscribe[name] = MODULES[name]();
+      else unsubscribe[name]();
+    });
+
+    // ---- The monitor: log every event and who received it ----
+    bus.onEmit = (type, detail, handlers) => {
+      const li = document.createElement('li');
+      const data = detail === undefined ? '' : ` ${JSON.stringify(detail)}`;
+      li.append(Object.assign(document.createElement('code'), { textContent: `${type}${data}` }),
+        Object.assign(document.createElement('span'), {
+          className: 'to',
+          textContent: handlers.length ? `→ ${handlers.map((h) => h.name).join(', ')}` : '→ nobody is listening',
+        }));
+      $('log').prepend(li);
+      while ($('log').children.length > 8) $('log').lastElementChild.remove();
+    };
+  </script>
+</body>
+</html>
