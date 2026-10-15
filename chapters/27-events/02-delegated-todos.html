@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>27-2 Event Delegation To-Do List</title>
+  <style>
+    .todo-panel, .log-panel { width: min(640px, 100%); }
+    .add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; font-size: 14px; }
+    .add input { flex: 1 1 10em; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 0; }
+    .todos { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+    .todo { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
+    .todo label { flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; overflow-wrap: anywhere; }
+    .todo.is-done .text { text-decoration: line-through; color: var(--muted); }
+    .delete { font: inherit; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--bad); padding: 3px 8px; cursor: pointer; }
+    .footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .log { margin: 0; padding: 0; list-style: none; font: 12px/1.7 var(--mono); max-height: 200px; overflow: auto; }
+    .log:empty::before { content: "Tick a box or delete a task."; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel todo-panel">
+    <form class="add" id="add">
+      <label for="text">New task</label>
+      <input id="text" autocomplete="off" required>
+      <button class="btn btn-primary" type="submit">Add</button>
+    </form>
+    <ul class="todos" id="todos"></ul>
+    <div class="footer">
+      <span id="count" aria-live="polite"></span>
+      <button class="btn" id="clear" type="button">Clear completed</button>
+    </div>
+  </div>
+  <div class="panel log-panel">
+    <p class="label">What the listeners on the &lt;ul&gt; saw</p>
+    <ol class="log" id="log"></ol>
+  </div>
+  <template id="todo-template">
+    <li class="todo">
+      <label><input type="checkbox" class="done"> <span class="text"></span></label>
+      <button class="delete" type="button">Delete</button>
+    </li>
+  </template>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    let nextId = 1;
+
+    function addTodo(text) {
+      const li = $('todo-template').content.firstElementChild.cloneNode(true);
+      li.dataset.id = nextId++;
+      li.querySelector('.text').textContent = text;
+      li.querySelector('.delete').setAttribute('aria-label', `Delete “${text}”`);
+      $('todos').append(li);
+      update();
+    }
+    function update() {
+      const all = $('todos').children.length;
+      const done = $('todos').querySelectorAll('.done:checked').length;
+      $('count').textContent = `${all} task(s), ${done} done · listeners on the list: 2, for any number of tasks`;
+    }
+    function log(event, li, action) {
+      const target = event.target.localName + (event.target.className ? `.${event.target.className}` : '');
+      $('log').prepend(Object.assign(document.createElement('li'), {
+        textContent: `${event.type} · target: ${target} → closest('li'): #${li.dataset.id} → ${action}`,
+      }));
+    }
+
+    // Event delegation: the list handles events for every item, present or future
+    $('todos').addEventListener('click', (event) => {
+      const button = event.target.closest('button.delete');
+      if (!button) return;
+      const li = button.closest('li');
+      log(event, li, 'remove');
+      li.remove();
+      update();
+    });
+    $('todos').addEventListener('change', (event) => {
+      if (!event.target.matches('input.done')) return;
+      const li = event.target.closest('li');
+      li.classList.toggle('is-done', event.target.checked);
+      log(event, li, event.target.checked ? 'mark done' : 'mark not done');
+      update();
+    });
+
+    $('add').addEventListener('submit', (event) => {
+      event.preventDefault();                   // stay on the page instead of submitting the form
+      addTodo($('text').value.trim());
+      $('add').reset();
+      $('text').focus();
+    });
+    $('clear').addEventListener('click', () => {
+      for (const li of $('todos').querySelectorAll('li.is-done')) li.remove();
+      update();
+    });
+    for (const text of ['Read chapter 27', 'Click the text, not just the box', 'Add a task of your own']) addTodo(text);
+  </script>
+</body>
+</html>

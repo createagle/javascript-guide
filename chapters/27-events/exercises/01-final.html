@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 27-1 · Final: One Listener for a Whole Cart</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 27-1" data-mode="dom">
+    <template class="html">
+      <ul id="cart">
+        <li data-price="2.5"><span class="name">Pen</span> <button class="plus" type="button">+</button> <output class="qty">1</output> <button class="minus" type="button">−</button></li>
+        <li data-price="4"><span class="name">Notebook</span> <button class="plus" type="button">+</button> <output class="qty">1</output> <button class="minus" type="button">−</button></li>
+      </ul>
+      <p>Total: <output id="total">6.50</output></p>
+    </template>
+    <script type="text/plain" class="code">
+      // Clicking + or − changes the quantity of that row (never below 0) and updates #total.
+      // Rows can be added later (see addRow), so use ONE listener on the <ul> instead of one per button.
+      const cart = document.querySelector('#cart');
+
+      function updateTotal() {
+        let total = 0;
+        for (const li of cart.children) total += Number(li.dataset.price) * Number(li.querySelector('.qty').value);
+        document.querySelector('#total').value = total.toFixed(2);
+      }
+
+      cart.addEventListener('click', (event) => {
+        const button = event.target.closest('button.plus, button.minus');
+        if (!button) return;                                  // a click somewhere else in the list
+        const qty = button.closest('li').querySelector('.qty');
+        const change = button.matches('.plus') ? 1 : -1;
+        qty.value = Math.max(0, Number(qty.value) + change);
+        updateTotal();
+      });
+
+      function addRow(name, price) {
+        const li = cart.firstElementChild.cloneNode(true);
+        li.dataset.price = price;
+        li.querySelector('.name').textContent = name;
+        li.querySelector('.qty').value = 1;
+        cart.append(li);
+        updateTotal();
+      }
+      addRow('Backpack', 30);
+    </script>
+    <script type="text/plain" class="tests">
+      const row = (n) => cart.children[n];
+      const click = (n, cls) => row(n).querySelector(`.${cls}`).click();
+      test('+ adds one to its own row', () => {
+        click(0, 'plus');
+        assert.equal(row(0).querySelector('.qty').value, '2');
+        assert.equal(row(1).querySelector('.qty').value, '1');
+      });
+      test('rows added later work too', () => {
+        click(2, 'plus');
+        assert.equal(row(2).querySelector('.qty').value, '2');
+      });
+      test('never below zero', () => {
+        click(1, 'minus');
+        click(1, 'minus');
+        assert.equal(row(1).querySelector('.qty').value, '0');
+      });
+      test('the total follows', () => assert.equal(document.querySelector('#total').value, (2.5 * 2 + 0 + 30 * 2).toFixed(2)));
+      test('clicking the name does nothing', () => {
+        row(0).querySelector('.name').click();
+        assert.equal(row(0).querySelector('.qty').value, '2');
+      });
+    </script>
+  </div>
+</body>
+</html>

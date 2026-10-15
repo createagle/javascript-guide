@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>27-1 Event Propagation</title>
+  <style>
+    .stage-panel, .log-panel { width: min(760px, 100%); }
+    .globals { display: flex; gap: 8px; margin-bottom: 10px; }
+    .pill { font: 12px var(--mono); padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; }
+    .box { position: relative; display: block; border: 2px solid var(--border); border-radius: 10px; padding: 26px 14px 14px; }
+    .tag { position: absolute; top: 4px; left: 10px; font: 12px var(--mono); color: var(--muted); }
+    .target { margin: 4px auto 0; padding: 10px 18px; font: 600 14px var(--mono); background: var(--surface); color: var(--fg); cursor: pointer; }
+    .lit { animation: lit 0.9s ease-out; }
+    @keyframes lit { 0%, 30% { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); } }
+    .log { margin: 0; padding-left: 1.6em; font: 12px/1.7 var(--mono); }
+    .log:empty::before { content: "Click the button, the div or the section."; margin-left: -1.6em; color: var(--muted); }
+    .log li { overflow-wrap: anywhere; }
+    .phase1 { color: var(--accent); }
+    .phase2 { color: var(--good); font-weight: 600; }
+    .phase3 { color: var(--warn); }
+    .stopped { color: var(--bad); font-weight: 600; list-style: none; margin-left: -1.6em; }
+    @media (prefers-reduced-motion: reduce) { .lit { animation: none; border-color: var(--accent); } }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Call stopPropagation() in
+      <select class="btn" id="stop">
+        <option value="">no listener</option>
+        <option value="section:capture">section, capture listener</option>
+        <option value="button:bubble">button, bubble listener</option>
+        <option value="div:bubble">div, bubble listener</option>
+      </select></label>
+  </div>
+  <div class="panel stage-panel">
+    <div class="globals"><span class="pill" data-name="window">window</span><span class="pill" data-name="document">document</span></div>
+    <section class="box" id="section" data-name="section">
+      <span class="tag">&lt;section&gt;</span>
+      <div class="box" id="div" data-name="div">
+        <span class="tag">&lt;div&gt;</span>
+        <button class="box target" id="button" data-name="button" type="button">&lt;button&gt; Click me</button>
+      </div>
+    </section>
+  </div>
+  <div class="panel log-panel">
+    <p class="label">Listeners that ran, in order</p>
+    <ol class="log" id="log"></ol>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const PHASES = ['NONE', 'CAPTURING_PHASE', 'AT_TARGET', 'BUBBLING_PHASE'];
+    const LEVELS = [['window', window], ['document', document], ['section', $('section')], ['div', $('div')], ['button', $('button')]];
+    const label = (node) => (node === window ? 'window' : node === document ? 'document' : node.dataset.name);
+    let steps = [];
+
+    // Two listeners on every level: one for the capture phase, one for the bubble phase
+    for (const [name, target] of LEVELS) {
+      for (const capture of [true, false]) {
+        target.addEventListener('click', (event) => {
+          if (!$('section').contains(event.target)) return;   // only clicks inside the demo
+          if (!steps.length) setTimeout(show);                 // the whole dispatch is synchronous: show it afterwards
+          steps.push({ name, capture, phase: event.eventPhase, target: label(event.target), current: label(event.currentTarget) });
+          if ($('stop').value === `${name}:${capture ? 'capture' : 'bubble'}`) {
+            event.stopPropagation();
+            steps.push({ stopped: name });
+          }
+        }, { capture });
+      }
+    }
+
+    function light(name, delay) {
+      const el = document.querySelector(`[data-name="${name}"]`);
+      setTimeout(() => {
+        el.classList.remove('lit');
+        void el.offsetWidth;                // restart the animation
+        el.classList.add('lit');
+      }, delay);
+    }
+
+    function show() {
+      const items = steps.map((step, i) => {
+        const li = document.createElement('li');
+        if (step.stopped) {
+          li.className = 'stopped';
+          li.textContent = `stopPropagation() in ${step.stopped}: the event goes no further`;
+          return li;
+        }
+        li.className = `phase${step.phase}`;
+        li.textContent = `${step.capture ? 'capture' : 'bubble'} listener on ${step.name} · eventPhase ${step.phase} (${PHASES[step.phase]}) · target: ${step.target} · currentTarget: ${step.current}`;
+        light(step.name, reduceMotion ? 0 : i * 220);
+        return li;
+      });
+      $('log').replaceChildren(...items);
+      steps = [];
+    }
+  </script>
+</body>
+</html>

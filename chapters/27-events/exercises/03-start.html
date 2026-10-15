@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 27-3 · Start: Wait for an Event</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 27-3" data-mode="dom">
+    <template class="html">
+      <button id="ok" type="button">OK</button>
+      <button id="cancel" type="button">Cancel</button>
+    </template>
+    <script type="text/plain" class="code">
+      // waitFor(target, type, { signal }) returns a promise that fulfills with the next `type` event
+      // on target. It must:
+      // - listen only once (later events change nothing)
+      // - reject with the signal's reason if the signal aborts first, and stop listening then
+      function waitFor(target, type, { signal } = {}) {
+        return new Promise((resolve) => {
+          target.addEventListener(type, resolve);
+        });
+      }
+
+      const ok = document.querySelector('#ok');
+      setTimeout(() => ok.click(), 100);
+      const event = await waitFor(ok, 'click');
+      console.log('clicked:', event.target.id);
+    </script>
+    <script type="text/plain" class="tests">
+      const cancel = document.querySelector('#cancel');
+      // Fail instead of waiting forever when a promise never settles
+      const within = (promise) => Promise.race([promise, new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Still pending after 500 ms')), 500);
+      })]);
+      test('fulfills with the event', async () => {
+        const promise = waitFor(cancel, 'click');
+        cancel.click();
+        const event = await promise;
+        assert.equal(event.type, 'click');
+        assert.equal(event.target, cancel);
+      });
+      test('fulfills with the first event only', async () => {
+        const promise = waitFor(ok, 'custom');
+        ok.dispatchEvent(new CustomEvent('custom', { detail: 'first' }));
+        ok.dispatchEvent(new CustomEvent('custom', { detail: 'second' }));
+        assert.equal((await promise).detail, 'first');
+      });
+      test('an abort rejects with the reason', async () => {
+        const controller = new AbortController();
+        const promise = waitFor(ok, 'click', { signal: controller.signal });
+        controller.abort(new Error('Gave up'));
+        await assert.rejects(within(promise), /Gave up/);
+      });
+      test('after an abort, events are ignored', async () => {
+        const controller = new AbortController();
+        let settled = 'pending';
+        waitFor(ok, 'ping', { signal: controller.signal }).then(() => { settled = 'fulfilled'; }, () => { settled = 'rejected'; });
+        controller.abort();
+        ok.dispatchEvent(new Event('ping'));
+        await new Promise((r) => setTimeout(r));
+        assert.equal(settled, 'rejected');
+      });
+      test('an already aborted signal rejects at once', async () => {
+        const error = await assert.rejects(within(waitFor(ok, 'click', { signal: AbortSignal.abort() })));
+        assert.equal(error.name, 'AbortError');
+      });
+    </script>
+  </div>
+</body>
+</html>

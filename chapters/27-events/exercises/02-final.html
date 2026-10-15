@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 27-2 · Final: Announce a Change with a Custom Event</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 27-2" data-mode="dom">
+    <template class="html">
+      <div class="rating" id="rating" role="group" aria-label="Rating">
+        <button type="button" data-value="1">★</button><button type="button" data-value="2">★</button><button type="button" data-value="3">★</button><button type="button" data-value="4">★</button><button type="button" data-value="5">★</button>
+      </div>
+      <p id="said">No rating yet</p>
+    </template>
+    <script type="text/plain" class="code">
+      // When a star is clicked, the rating widget should:
+      // - mark that star and the ones before it with aria-pressed="true" (the others "false")
+      // - dispatch a 'rating:change' event from #rating that bubbles, with detail { value }
+      // Code elsewhere (below) listens on document and doesn't know about the stars at all.
+      const rating = document.querySelector('#rating');
+
+      rating.addEventListener('click', (event) => {
+        const star = event.target.closest('button[data-value]');
+        if (!star) return;
+        const value = Number(star.dataset.value);
+        for (const button of rating.querySelectorAll('button')) {
+          button.setAttribute('aria-pressed', String(Number(button.dataset.value) <= value));
+        }
+        // CustomEvent carries data in detail; bubbles lets listeners further up hear it
+        rating.dispatchEvent(new CustomEvent('rating:change', { bubbles: true, detail: { value } }));
+      });
+
+      document.addEventListener('rating:change', (event) => {
+        document.querySelector('#said').textContent = `You rated ${event.detail?.value} out of 5`;
+      });
+    </script>
+    <script type="text/plain" class="tests">
+      const star = (n) => rating.querySelector(`[data-value="${n}"]`);
+      test('stars up to the clicked one are pressed', () => {
+        star(4).click();
+        assert.deepEqual([...rating.children].map((b) => b.getAttribute('aria-pressed')), ['true', 'true', 'true', 'true', 'false']);
+      });
+      test('the event reaches document with the value', () => {
+        let seen;
+        const listener = (event) => { seen = event; };
+        document.addEventListener('rating:change', listener);
+        star(2).click();
+        document.removeEventListener('rating:change', listener);
+        assert.ok(seen instanceof CustomEvent, 'a CustomEvent');
+        assert.deepEqual(seen.detail, { value: 2 });
+        assert.equal(seen.target, rating);
+      });
+      test('the page text updates', () => assert.equal(document.querySelector('#said').textContent, 'You rated 2 out of 5'));
+    </script>
+  </div>
+</body>
+</html>
