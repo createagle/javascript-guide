@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 29-1 · Final: A Safer localStorage</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 29-1">
+    <script type="text/plain" class="code">
+      // A stand-in with the same methods as localStorage, so the exercise runs anywhere.
+      // It throws a QuotaExceededError when more than `limit` characters are stored, like the real thing.
+      class MemoryStorage {
+        #items = new Map();
+        constructor(limit = Infinity) { this.limit = limit; }
+        get length() { return this.#items.size; }
+        key(i) { return [...this.#items.keys()][i] ?? null; }
+        getItem(key) { return this.#items.has(key) ? this.#items.get(key) : null; }
+        setItem(key, value) {
+          const size = [...this.#items].reduce((n, [k, v]) => (k === key ? n : n + k.length + v.length), 0) + key.length + String(value).length;
+          if (size > this.limit) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+          this.#items.set(key, String(value));
+        }
+        removeItem(key) { this.#items.delete(key); }
+      }
+
+      // createStore(storage, prefix) wraps a Storage (like localStorage) for one app:
+      // - set(key, value, { ttl }) saves any JSON value under prefix + key; ttl (ms) makes it expire
+      // - get(key, fallback) returns the value, or fallback if it is missing, expired or not valid JSON
+      // - set returns false instead of throwing when storage is full or unavailable
+      // - clear() removes only this app's keys
+      function createStore(storage, prefix) {
+        return {
+          get(key, fallback) {
+            try {
+              const saved = JSON.parse(storage.getItem(prefix + key));
+              if (saved === null || (saved.expires && Date.now() > saved.expires)) return fallback;
+              return saved.value;
+            } catch {
+              return fallback;                // not JSON: written by something else, or corrupted
+            }
+          },
+          set(key, value, { ttl } = {}) {
+            try {
+              // Wrap the value so the expiry time travels with it
+              storage.setItem(prefix + key, JSON.stringify({ value, expires: ttl ? Date.now() + ttl : null }));
+              return true;
+            } catch {
+              return false;                   // QuotaExceededError, or storage turned off
+            }
+          },
+          clear() {
+            // Collect first: removing while looping over key(i) would skip items
+            const mine = [];
+            for (let i = 0; i < storage.length; i++) {
+              if (storage.key(i).startsWith(prefix)) mine.push(storage.key(i));
+            }
+            for (const key of mine) storage.removeItem(key);
+          },
+        };
+      }
+
+      const store = createStore(new MemoryStorage(), 'app:');
+      store.set('settings', { theme: 'dark', fontSize: 16 });
+      console.log(store.get('settings'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('objects round-trip', () => {
+        const s = createStore(new MemoryStorage(), 'app:');
+        s.set('settings', { theme: 'dark', fontSize: 16 });
+        assert.deepEqual(s.get('settings'), { theme: 'dark', fontSize: 16 });
+      });
+      test('numbers and booleans keep their type', () => {
+        const s = createStore(new MemoryStorage(), 'app:');
+        s.set('count', 3);
+        s.set('seen', false);
+        assert.equal(s.get('count'), 3);
+        assert.equal(s.get('seen', true), false);
+      });
+      test('missing or broken values give the fallback', () => {
+        const raw = new MemoryStorage();
+        raw.setItem('app:broken', '{oops');
+        const s = createStore(raw, 'app:');
+        assert.equal(s.get('nothing', 'default'), 'default');
+        assert.equal(s.get('broken', 'default'), 'default');
+      });
+      test('expired values are gone', async () => {
+        const s = createStore(new MemoryStorage(), 'app:');
+        s.set('token', 'abc', { ttl: 30 });
+        assert.equal(s.get('token'), 'abc');
+        await new Promise((r) => setTimeout(r, 60));
+        assert.equal(s.get('token', null), null);
+      });
+      test('a full storage returns false', () => {
+        const s = createStore(new MemoryStorage(50), 'app:');
+        assert.equal(s.set('big', 'x'.repeat(100)), false);
+      });
+      test('clear() keeps other apps\' keys', () => {
+        const raw = new MemoryStorage();
+        raw.setItem('other:keep', '1');
+        const s = createStore(raw, 'app:');
+        s.set('a', 1);
+        s.set('b', 2);
+        s.clear();
+        assert.equal(raw.length, 1);
+        assert.equal(raw.getItem('other:keep'), '1');
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>29-2 IndexedDB Notebook</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .editor { display: grid; gap: 10px; }
+    .editor label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+    .editor input, .editor textarea, .editor select { font: inherit; font-weight: 400; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .count { font-size: 12px; color: var(--muted); }
+    .notes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+    .notes li { display: flex; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+    .open { flex: 1; display: grid; gap: 2px; text-align: left; background: none; border: 0; color: var(--fg); font: inherit; cursor: pointer; padding: 0; min-width: 0; overflow-wrap: anywhere; }
+    .meta { font-size: 12px; color: var(--muted); }
+    .delete { font: inherit; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--bad); padding: 3px 8px; cursor: pointer; }
+    .status { width: min(900px, 100%); font-size: 13px; color: var(--muted); }
+    .status.bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <form class="panel editor" id="editor">
+      <input type="hidden" id="id">
+      <label>Title <input id="title" required autocomplete="off"></label>
+      <label>Note <textarea id="body" rows="5"></textarea></label>
+      <label>Tag
+        <select id="tag"><option>idea</option><option>todo</option><option>reading</option></select></label>
+      <div class="row">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <button class="btn" type="reset" id="new">New note</button>
+      </div>
+    </form>
+    <div class="panel list-panel">
+      <div class="row">
+        <label class="control">Show
+          <select class="btn" id="filter"><option value="">all tags</option><option>idea</option><option>todo</option><option>reading</option></select></label>
+        <span class="count" id="count" aria-live="polite"></span>
+      </div>
+      <ul class="notes" id="notes"></ul>
+    </div>
+  </div>
+  <p class="status" id="status" role="status"></p>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // IndexedDB uses events; wrap a request in a promise
+    const done = (request) => new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    function openNotebook() {
+      const request = indexedDB.open('jsguide-notebook', 1);
+      // Runs only when the database is new or the version goes up: define the schema here
+      request.onupgradeneeded = () => {
+        const store = request.result.createObjectStore('notes', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('byTag', 'tag');
+        store.createIndex('byUpdated', 'updated');
+      };
+      return done(request);
+    }
+
+    let db;
+    const store = (mode) => db.transaction('notes', mode).objectStore('notes');
+
+    async function render() {
+      const tag = $('filter').value;
+      // An index answers "all notes with this tag" without reading every note
+      const notes = tag ? await done(store('readonly').index('byTag').getAll(tag)) : await done(store('readonly').index('byUpdated').getAll());
+      notes.sort((a, b) => b.updated - a.updated);
+      $('notes').replaceChildren(...notes.map((note) => {
+        const li = document.createElement('li');
+        li.dataset.id = note.id;
+        const open = Object.assign(document.createElement('button'), { type: 'button', className: 'open' });
+        open.append(Object.assign(document.createElement('strong'), { textContent: note.title }),
+          Object.assign(document.createElement('span'), { className: 'meta', textContent: `#${note.tag} · ${note.updated.toLocaleString('en')}` }));
+        const remove = Object.assign(document.createElement('button'), { type: 'button', className: 'delete', textContent: 'Delete' });
+        remove.setAttribute('aria-label', `Delete “${note.title}”`);
+        li.append(open, remove);
+        return li;
+      }));
+      const total = await done(store('readonly').count());
+      $('count').textContent = `${notes.length} shown · ${total} in the database`;
+    }
+
+    $('editor').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const note = { title: $('title').value.trim(), body: $('body').value, tag: $('tag').value, updated: new Date() };
+      if ($('id').value) note.id = Number($('id').value);
+      const id = await done(store('readwrite').put(note));   // put: add or replace by key
+      $('id').value = id;
+      $('status').textContent = `Saved note #${id}. Reload the page: it is still there.`;
+      render();
+    });
+    $('editor').addEventListener('reset', () => { $('id').value = ''; $('status').textContent = ''; });
+    $('filter').addEventListener('change', render);
+
+    $('notes').addEventListener('click', async (event) => {
+      const li = event.target.closest('li[data-id]');
+      if (!li) return;
+      const id = Number(li.dataset.id);
+      if (event.target.closest('.delete')) {
+        await done(store('readwrite').delete(id));
+        if (Number($('id').value) === id) $('editor').reset();
+        $('status').textContent = `Deleted note #${id}.`;
+        render();
+      } else if (event.target.closest('.open')) {
+        const note = await done(store('readonly').get(id));
+        $('id').value = note.id;
+        $('title').value = note.title;
+        $('body').value = note.body;
+        $('tag').value = note.tag;
+        $('title').focus();
+      }
+    });
+
+    try {
+      db = await openNotebook();
+      if (await done(store('readonly').count()) === 0) {
+        await done(store('readwrite').add({ title: 'Welcome', body: 'Notes live in IndexedDB, in this browser only.', tag: 'idea', updated: new Date() }));
+      }
+      render();
+    } catch (error) {
+      $('status').textContent = `IndexedDB is not available here (${error.name}). Private modes and blocked site data can turn it off.`;
+      $('status').className = 'status bad';
+    }
+  </script>
+</body>
+</html>

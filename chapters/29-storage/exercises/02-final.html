@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 29-2 · Final: Read and Write Cookie Strings</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 29-2">
+    <script type="text/plain" class="code">
+      // document.cookie gives you one string, and takes one cookie at a time as a string.
+      // parseCookies('a=1; theme=dark%20blue') → { a: '1', theme: 'dark blue' }  (values decoded)
+      // serializeCookie(name, value, { maxAge, path, sameSite, secure }) builds the string to assign,
+      // with the value encoded: serializeCookie('theme', 'dark blue', { maxAge: 3600, path: '/' })
+      //   → 'theme=dark%20blue; Max-Age=3600; Path=/'
+      function parseCookies(header) {
+        const cookies = {};
+        for (const part of header.split(';')) {
+          const at = part.indexOf('=');               // only the first '=' separates name and value
+          if (at === -1) continue;
+          const name = part.slice(0, at).trim();
+          if (name) cookies[name] = decodeURIComponent(part.slice(at + 1).trim());
+        }
+        return cookies;
+      }
+
+      function serializeCookie(name, value, { maxAge, path, sameSite, secure } = {}) {
+        const parts = [`${name}=${encodeURIComponent(value)}`];
+        if (maxAge !== undefined) parts.push(`Max-Age=${maxAge}`);
+        if (path) parts.push(`Path=${path}`);
+        if (sameSite) parts.push(`SameSite=${sameSite}`);
+        if (secure) parts.push('Secure');
+        return parts.join('; ');
+      }
+
+      console.log(parseCookies('a=1; theme=dark%20blue'));
+      console.log(serializeCookie('theme', 'dark blue', { maxAge: 3600, path: '/' }));
+    </script>
+    <script type="text/plain" class="tests">
+      test('parses and decodes', () => assert.deepEqual(parseCookies('a=1; theme=dark%20blue'), { a: '1', theme: 'dark blue' }));
+      test('values may contain =', () => assert.deepEqual(parseCookies('token=abc==; x=1'), { token: 'abc==', x: '1' }));
+      test('an empty string gives {}', () => assert.deepEqual(parseCookies(''), {}));
+      test('serializes with attributes', () => {
+        assert.equal(serializeCookie('theme', 'dark blue', { maxAge: 3600, path: '/' }), 'theme=dark%20blue; Max-Age=3600; Path=/');
+        assert.equal(serializeCookie('id', '7', { sameSite: 'Strict', secure: true }), 'id=7; SameSite=Strict; Secure');
+      });
+      test('deleting: Max-Age=0', () => assert.equal(serializeCookie('id', '', { maxAge: 0 }), 'id=; Max-Age=0'));
+      test('a round trip keeps ; and non-ASCII', () => {
+        const value = 'a;b 中文';
+        assert.equal(parseCookies(serializeCookie('v', value))['v'], value);
+      });
+    </script>
+  </div>
+</body>
+</html>

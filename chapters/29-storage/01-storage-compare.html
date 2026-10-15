@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>29-1 Four Kinds of Browser Storage</title>
+  <style>
+    .writer, .table-wrap, .events { width: min(900px, 100%); }
+    .writer { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; }
+    .writer label { display: flex; align-items: center; gap: 8px; flex: 1 1 16em; }
+    .writer input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+    .writer a.btn { text-decoration: none; }
+    .table-wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 540px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    thead th { font-size: 12px; color: var(--muted); }
+    td:nth-child(2) { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+    td.empty { color: var(--muted); }
+    td.bad { color: var(--bad); }
+    .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+    .log { margin: 0; padding: 0; list-style: none; font: 12px/1.7 var(--mono); }
+    .log:empty::before { content: "Nothing yet. A tab never receives storage events for its own changes."; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <form class="panel writer" id="writer">
+    <label>Value to save <input id="value" value="Hello from" autocomplete="off"></label>
+    <button class="btn btn-primary" type="submit">Save in all four</button>
+    <button class="btn" type="button" id="clear">Clear all four</button>
+    <a class="btn" id="reload" href="">Reload the page</a>
+  </form>
+  <div class="panel table-wrap">
+    <table>
+      <thead><tr><th scope="col">Storage</th><th scope="col">Read back now</th><th scope="col">Lives until</th><th scope="col">API</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="note" id="quota"></p>
+  </div>
+  <div class="panel events">
+    <p class="label">storage events from other tabs <a href="" target="_blank" id="other">open this page in another tab</a> and save there</p>
+    <ol class="log" id="log"></ol>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const KEY = 'jsguide-demo';
+
+    // A tiny promise wrapper for one IndexedDB key-value store
+    function idb(mode, work) {
+      return new Promise((resolve, reject) => {
+        const open = indexedDB.open('jsguide-demo', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('kv');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction('kv', mode);
+          const request = work(tx.objectStore('kv'));
+          tx.oncomplete = () => { db.close(); resolve(request.result); };
+          tx.onerror = () => { db.close(); reject(tx.error); };
+        };
+      });
+    }
+
+    const STORES = [
+      {
+        name: 'Cookie', life: 'the expiry date (here 7 days); sent to the server with every request', api: 'document.cookie, synchronous, ~4 KB',
+        read: () => {
+          const pair = document.cookie.split('; ').find((c) => c.startsWith(`${KEY}=`));
+          return pair ? decodeURIComponent(pair.slice(KEY.length + 1)) : null;
+        },
+        write: (v) => { document.cookie = `${KEY}=${encodeURIComponent(v)}; Max-Age=${7 * 24 * 3600}; Path=/; SameSite=Lax`; },
+        clear: () => { document.cookie = `${KEY}=; Max-Age=0; Path=/`; },
+      },
+      {
+        name: 'localStorage', life: 'deleted by the user or the code; shared by all tabs of this origin', api: 'synchronous, strings only, ~5 MB',
+        read: () => localStorage.getItem(KEY), write: (v) => localStorage.setItem(KEY, v), clear: () => localStorage.removeItem(KEY),
+      },
+      {
+        name: 'sessionStorage', life: 'this tab is closed; each tab has its own', api: 'synchronous, strings only, ~5 MB',
+        read: () => sessionStorage.getItem(KEY), write: (v) => sessionStorage.setItem(KEY, v), clear: () => sessionStorage.removeItem(KEY),
+      },
+      {
+        name: 'IndexedDB', life: 'deleted by the user or the code (or evicted when the disk is full)', api: 'asynchronous, structured data, large',
+        read: () => idb('readonly', (s) => s.get(KEY)), write: (v) => idb('readwrite', (s) => s.put({ text: v, at: new Date() }, KEY)), clear: () => idb('readwrite', (s) => s.delete(KEY)),
+      },
+    ];
+
+    const cells = STORES.map((store) => {
+      const tr = document.createElement('tr');
+      const value = document.createElement('td');
+      tr.append(Object.assign(document.createElement('th'), { scope: 'row', textContent: store.name }), value,
+        Object.assign(document.createElement('td'), { textContent: store.life }),
+        Object.assign(document.createElement('td'), { textContent: store.api }));
+      $('rows').append(tr);
+      return value;
+    });
+
+    // Storage can be blocked (private modes, settings, third-party iframes): every call may throw
+    async function refresh() {
+      await Promise.all(STORES.map(async (store, i) => {
+        try {
+          const v = await store.read();
+          cells[i].textContent = v == null ? '(nothing)' : typeof v === 'object' ? `{ text: '${v.text}', at: ${v.at.toLocaleTimeString('en')} } (a real Date)` : `'${v}'`;
+          cells[i].className = v == null ? 'empty' : '';
+        } catch (error) {
+          cells[i].textContent = `${error.name}: ${error.message}`;
+          cells[i].className = 'bad';
+        }
+      }));
+      try {
+        const { usage, quota } = await navigator.storage.estimate();
+        $('quota').textContent = `navigator.storage.estimate(): this origin uses ${(usage / 1024).toFixed(1)} KB of about ${(quota / 1024 ** 3).toFixed(1)} GB.`;
+      } catch {
+        $('quota').textContent = 'navigator.storage.estimate() is not available here.';
+      }
+    }
+
+    async function each(action) {
+      for (const store of STORES) {
+        try {
+          await action(store);
+        } catch { /* refresh() shows the error */ }
+      }
+      refresh();
+    }
+    $('writer').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const value = `${$('value').value} ${new Date().toLocaleTimeString('en')}`;
+      each((store) => store.write(value));
+    });
+    $('clear').addEventListener('click', () => each((store) => store.clear()));
+    $('reload').href = $('other').href = location.href;
+
+    // Fired in OTHER tabs of the same origin when localStorage changes
+    window.addEventListener('storage', (event) => {
+      if (event.key !== KEY) return;
+      $('log').prepend(Object.assign(document.createElement('li'), {
+        textContent: `${new Date().toLocaleTimeString('en')} · key ${event.key}: ${JSON.stringify(event.oldValue)} → ${JSON.stringify(event.newValue)}`,
+      }));
+      refresh();
+    });
+    refresh();
+  </script>
+</body>
+</html>

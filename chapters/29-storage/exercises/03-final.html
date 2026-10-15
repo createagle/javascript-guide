@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 29-3 · Final: A Small IndexedDB Store</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 29-3">
+    <script type="text/plain" class="code">
+      // Each run uses a fresh database, deleted at the end
+      const DB_NAME = `exercise-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const done = (request) => new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      // openBooks() opens DB_NAME (version 1). On upgrade it must create a 'books' store
+      // with keyPath 'isbn' and an index 'byAuthor' on the 'author' property.
+      // addBooks(db, books) puts all books in ONE readwrite transaction and resolves when it completes.
+      // booksBy(db, author) resolves to that author's books, using the index.
+      function openBooks() {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = () => {
+          const store = request.result.createObjectStore('books', { keyPath: 'isbn' });
+          store.createIndex('byAuthor', 'author');
+        };
+        return done(request);
+      }
+      function addBooks(db, books) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('books', 'readwrite');
+          const store = tx.objectStore('books');
+          tx.oncomplete = () => resolve();     // all or nothing: complete means all were written
+          tx.onabort = () => reject(tx.error);  // a failed request aborts the transaction
+          for (const book of books) {
+            try {
+              store.put(book);                  // queue every put in the same transaction
+            } catch (error) {
+              tx.abort();                       // put() throws at once for a bad key: undo the earlier puts
+              reject(error);
+              return;
+            }
+          }
+        });
+      }
+      function booksBy(db, author) {
+        return done(db.transaction('books').objectStore('books').index('byAuthor').getAll(author));
+      }
+
+      const db = await openBooks();
+      await addBooks(db, [
+        { isbn: '978-0262510875', title: 'SICP', author: 'Abelson' },
+        { isbn: '978-0596517748', title: 'JavaScript: The Good Parts', author: 'Crockford' },
+      ]);
+      console.log(await booksBy(db, 'Crockford'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('the schema', () => {
+        const store = db.transaction('books').objectStore('books');
+        assert.equal(store.keyPath, 'isbn');
+        assert.deepEqual([...store.indexNames], ['byAuthor']);
+      });
+      test('books by an author, through the index', async () => {
+        await addBooks(db, [
+          { isbn: '978-1593279509', title: 'Eloquent JavaScript', author: 'Haverbeke' },
+          { isbn: '978-1718504103', title: 'Eloquent JavaScript, 4th ed.', author: 'Haverbeke' },
+        ]);
+        const titles = (await booksBy(db, 'Haverbeke')).map((b) => b.title).sort();
+        assert.deepEqual(titles, ['Eloquent JavaScript', 'Eloquent JavaScript, 4th ed.']);
+      });
+      test('the same ISBN replaces the book', async () => {
+        await addBooks(db, [{ isbn: '978-0262510875', title: 'SICP (2nd ed.)', author: 'Abelson' }]);
+        const books = await booksBy(db, 'Abelson');
+        assert.equal(books.length, 1);
+        assert.equal(books[0].title, 'SICP (2nd ed.)');
+      });
+      test('one transaction: a bad book rolls back the whole batch', async () => {
+        const before = await done(db.transaction('books').objectStore('books').count());
+        await assert.rejects(addBooks(db, [{ isbn: 'x-1', author: 'A' }, { title: 'no isbn' }]));
+        assert.equal(await done(db.transaction('books').objectStore('books').count()), before);
+      });
+      test('clean up', async () => {
+        db.close();
+        await done(indexedDB.deleteDatabase(DB_NAME));
+      });
+    </script>
+  </div>
+</body>
+</html>
