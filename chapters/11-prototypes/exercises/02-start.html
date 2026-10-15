@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 11-2 · Start: Write new Yourself</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 11-2">
+    <script type="text/plain" class="code">
+      // myNew(Constructor, ...args) should do what new Constructor(...args) does:
+      // 1. create an object whose [[Prototype]] is Constructor.prototype,
+      // 2. call Constructor with this = that object,
+      // 3. return the object, unless Constructor returned an object of its own.
+      function myNew(Constructor, ...args) {
+        const obj = {};
+        Constructor.apply(obj, args);
+        return obj;
+      }
+
+      function Person(name) {
+        this.name = name;
+      }
+      Person.prototype.greet = function () {
+        return `Hi, I am ${this.name}`;
+      };
+
+      const ada = myNew(Person, 'Ada');
+      console.log(ada.name, ada instanceof Person);
+    </script>
+    <script type="text/plain" class="tests">
+      test('sets own properties', () => assert.equal(myNew(Person, 'Bo').name, 'Bo'));
+      test('links the prototype', () => {
+        const bo = myNew(Person, 'Bo');
+        assert.ok(Object.getPrototypeOf(bo) === Person.prototype);
+        assert.equal(bo.greet(), 'Hi, I am Bo');
+      });
+      test('instanceof works', () => assert.ok(myNew(Person, 'Bo') instanceof Person));
+      test('passes every argument', () => {
+        function Point(x, y) { this.x = x; this.y = y; }
+        assert.deepEqual({ ...myNew(Point, 1, 2) }, { x: 1, y: 2 });
+      });
+      test('uses an object the constructor returns', () => {
+        function Weird() { this.a = 1; return { b: 2 }; }
+        assert.deepEqual(myNew(Weird), { b: 2 });
+      });
+      test('ignores a primitive the constructor returns', () => {
+        function Five() { this.a = 1; return 5; }
+        assert.equal(myNew(Five).a, 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

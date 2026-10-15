@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 11-3 · Start: Where Does It Live?</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 11-3">
+    <script type="text/plain" class="code">
+      // whereIs(obj, key) returns how many steps up the prototype chain the property key is
+      // an own property: 0 when obj has it itself, 1 for obj's prototype, and so on.
+      // It returns -1 when no object on the chain has it.
+      function whereIs(obj, key) {
+        return key in obj ? 0 : -1;
+      }
+
+      console.log(whereIs([], 'length'), whereIs([], 'map'), whereIs([], 'hasOwnProperty'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('own property', () => assert.equal(whereIs([], 'length'), 0));
+      test('on Array.prototype', () => assert.equal(whereIs([], 'map'), 1));
+      test('on Object.prototype', () => assert.equal(whereIs([], 'hasOwnProperty'), 2));
+      test('not found anywhere', () => assert.equal(whereIs({}, 'nope'), -1));
+      test('an object with no prototype', () => assert.equal(whereIs(Object.create(null), 'toString'), -1));
+      test('a shadowing own property wins', () => {
+        const base = { color: 'red' };
+        const child = Object.create(base);
+        assert.equal(whereIs(child, 'color'), 1);
+        child.color = 'blue';
+        assert.equal(whereIs(child, 'color'), 0);
+      });
+    </script>
+  </div>
+</body>
+</html>

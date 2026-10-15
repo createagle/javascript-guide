@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>11-1 Prototype Chain Explorer</title>
+  <style>
+    #value { max-width: 100%; }
+    .key { width: 12em; font-family: var(--mono); }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+    .suggestions .btn { font-family: var(--mono); font-size: 12px; padding: 3px 8px; }
+    .result { margin: 0; max-width: 720px; text-align: center; font-size: 15px; min-height: 3em; }
+    .chain { list-style: none; margin: 0; padding: 0; width: min(720px, 100%); display: grid; gap: 0; }
+    .chain .box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--bg); }
+    /* The arrow between boxes: [[Prototype]] */
+    .chain .box + .box { margin-top: 26px; position: relative; }
+    .chain .box + .box::before { content: '↑ [[Prototype]]'; position: absolute; top: -23px; left: 18px; font: 12px var(--mono); color: var(--muted); }
+    .chain .searched { border-color: var(--accent); }
+    .chain .found { border: 2px solid var(--accent); background: color-mix(in oklch, var(--accent) 8%, var(--bg)); }
+    .chain .after { opacity: 0.45; }
+    .chain .end { color: var(--muted); font: 13px var(--mono); }
+    .name { margin: 0 0 6px; font-weight: 600; font-size: 14px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+    .count { font-weight: 400; font-size: 12px; color: var(--muted); }
+    .keys { display: flex; flex-wrap: wrap; gap: 4px; max-height: 92px; overflow: auto; position: relative; }
+    .keys code { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--surface); }
+    .keys code.hit { background: var(--accent); color: var(--accent-fg); font-weight: 700; }
+    .keys .empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="value">Value</label>
+    <select id="value" class="btn"></select>
+  </div>
+  <form class="controls" id="lookup">
+    <label class="control" for="key">Look up</label>
+    <input id="key" class="btn key" autocomplete="off" spellcheck="false">
+    <span id="suggestions" class="suggestions"></span>
+  </form>
+  <p class="result" id="result" aria-live="polite"></p>
+  <ol class="chain" id="chain"></ol>
+  <script type="module">
+    function Person(name) { this.name = name; }
+    Person.prototype.greet = function () { return `Hi, I am ${this.name}`; };
+    class Point {
+      constructor(x, y) { this.x = x; this.y = y; }
+      toString() { return `(${this.x}, ${this.y})`; }
+    }
+    const animal = { eats: true, describe() { return `${this.name} eats: ${this.eats}`; } };
+    const rabbit = Object.create(animal);
+    rabbit.name = 'Rabbit';
+    rabbit.jumps = true;
+
+    const VALUES = [
+      { label: '[1, 2, 3]', make: () => [1, 2, 3], keys: ['length', 'push', 'toString', 'hasOwnProperty', 'nope'] },
+      { label: "'text'", make: () => 'text', keys: ['length', 'toUpperCase', 'valueOf', 'nope'] },
+      { label: '42', make: () => 42, keys: ['toFixed', 'toString', 'nope'] },
+      { label: '{ a: 1 }', make: () => ({ a: 1 }), keys: ['a', 'toString', 'nope'] },
+      { label: 'rabbit = Object.create(animal)', make: () => rabbit, keys: ['name', 'eats', 'describe', 'toString'] },
+      { label: "new Person('Ada')", make: () => new Person('Ada'), keys: ['name', 'greet', 'constructor', 'toString'] },
+      { label: 'new Point(1, 2)', make: () => new Point(1, 2), keys: ['x', 'toString', 'constructor'] },
+      { label: 'function () {}', make: () => function () {}, keys: ['name', 'call', 'bind', 'toString'] },
+      { label: 'new Map()', make: () => new Map(), keys: ['size', 'get', 'toString'] },
+      { label: 'document.body', make: () => document.body, keys: ['tagName', 'append', 'addEventListener', 'toString'] },
+      { label: 'Object.create(null)', make: () => Object.create(null), keys: ['toString', 'nope'] },
+    ];
+
+    // Names for the objects on a chain: a prototype is named after the constructor it belongs to
+    function nameOf(object, index, entry) {
+      if (index === 0) return entry.primitive ? `${entry.label} (a primitive: looked up on a temporary ${object.constructor.name} wrapper)` : entry.label;
+      if (object === animal) return 'animal';
+      if (Object.hasOwn(object, 'constructor') && typeof object.constructor === 'function') return `${object.constructor.name}.prototype`;
+      return 'an object';
+    }
+
+    function preview(value) {
+      if (typeof value === 'function') return `ƒ ${value.name || 'anonymous'}()`;
+      if (typeof value === 'string') return `'${value}'`;
+      if (value !== null && typeof value === 'object') return Object.prototype.toString.call(value);
+      return String(value);
+    }
+
+    const $ = (id) => document.getElementById(id);
+    VALUES.forEach((entry, i) => $('value').add(new Option(entry.label, i)));
+
+    let entry, start, chain;
+    function pick() {
+      entry = VALUES[$('value').value];
+      const value = entry.make();
+      entry.primitive = value === null || (typeof value !== 'object' && typeof value !== 'function');
+      start = entry.primitive ? Object(value) : value; // property access on a primitive wraps it first
+      chain = [];
+      for (let o = start; o !== null; o = Object.getPrototypeOf(o)) chain.push(o);
+      $('suggestions').replaceChildren(...entry.keys.map((key) => {
+        const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: key });
+        button.addEventListener('click', () => { $('key').value = key; lookup(); });
+        return button;
+      }));
+      $('key').value = entry.keys[0];
+      lookup();
+    }
+
+    function lookup() {
+      const key = $('key').value.trim();
+      const foundAt = key ? chain.findIndex((o) => Object.hasOwn(o, key)) : -1;
+      const searchedUpTo = foundAt === -1 ? chain.length - 1 : foundAt;
+      $('chain').replaceChildren(...chain.map((o, i) => {
+        const li = document.createElement('li');
+        li.className = 'box' + (i < searchedUpTo || (i === searchedUpTo && foundAt === -1) ? ' searched' : '') + (i === foundAt ? ' found' : '') + (i > searchedUpTo ? ' after' : '');
+        const keys = Reflect.ownKeys(o).map(String);
+        const head = document.createElement('p');
+        head.className = 'name';
+        head.textContent = nameOf(o, i, entry);
+        const count = Object.assign(document.createElement('span'), { className: 'count', textContent: `${keys.length} own ${keys.length === 1 ? 'property' : 'properties'}` });
+        head.append(count);
+        const list = document.createElement('div');
+        list.className = 'keys';
+        for (const k of keys) list.append(Object.assign(document.createElement('code'), { textContent: k, className: k === key && i === foundAt ? 'hit' : '' }));
+        if (!keys.length) list.append(Object.assign(document.createElement('span'), { className: 'empty', textContent: '(none)' }));
+        li.append(head, list);
+        return li;
+      }), Object.assign(document.createElement('li'), { className: 'box end' + (foundAt === -1 && key ? ' searched' : ''), textContent: 'null: the end of every chain' }));
+      // Show the matching key inside its (scrollable) list
+      const hit = $('chain').querySelector('.hit');
+      if (hit) hit.parentElement.scrollTop = hit.offsetTop - hit.parentElement.offsetTop - 8;
+
+      if (!key) { $('result').textContent = ''; return; }
+      if (foundAt === -1) {
+        $('result').textContent = `“${key}” is ${chain.length === 1 ? 'not on the only object on the chain' : `on none of the ${chain.length} objects`}. The lookup reaches null and the result is undefined.`;
+        return;
+      }
+      let value;
+      try { value = Reflect.get(start, key); } catch (error) { value = error; }
+      const where = foundAt === 0 ? 'an own property' : `found ${foundAt} ${foundAt === 1 ? 'step' : 'steps'} up the chain, on ${nameOf(chain[foundAt], foundAt, entry)}`;
+      $('result').textContent = `“${key}” is ${where}. Value: ${preview(value)}`;
+    }
+
+    $('value').addEventListener('change', pick);
+    $('key').addEventListener('input', lookup);
+    $('lookup').addEventListener('submit', (event) => { event.preventDefault(); lookup(); });
+    pick();
+  </script>
+</body>
+</html>

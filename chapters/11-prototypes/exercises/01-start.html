@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 11-1 · Start: Link, Don&#x27;t Copy</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 11-1">
+    <script type="text/plain" class="code">
+      // dog should inherit from animal: describe() lives only on animal,
+      // and dog has just two own properties, name and sound.
+      const animal = {
+        describe() {
+          return `${this.name} says ${this.sound}`;
+        },
+      };
+
+      const dog = { ...animal, name: 'Rex', sound: 'woof' };
+
+      console.log(dog.describe());
+    </script>
+    <script type="text/plain" class="tests">
+      test('dog can describe itself', () => assert.equal(dog.describe(), 'Rex says woof'));
+      test("dog's prototype is animal", () => assert.ok(Object.getPrototypeOf(dog) === animal));
+      test('describe is not copied onto dog', () => assert.deepEqual(Object.keys(dog).toSorted(), ['name', 'sound']));
+      test('methods added to animal later show up on dog', () => {
+        animal.wag = function () { return `${this.name} wags`; };
+        try {
+          assert.equal(dog.wag?.(), 'Rex wags');
+        } finally {
+          delete animal.wag;
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>11-2 What new Does</title>
+  <style>
+    .stage { width: min(920px, 100%); }
+    .stage > * { flex: 1 1 340px; }
+    .left { display: grid; gap: 16px; align-content: start; }
+    .code-list { margin: 0; padding: 12px 12px 12px 36px; font: 13px/1.5 var(--mono); white-space: pre; overflow-x: auto; }
+    .code-list li { padding: 2px 6px; border-radius: 6px; }
+    .code-list li.current { background: color-mix(in oklch, var(--accent) 18%, transparent); font-weight: 600; }
+    #objects { display: grid; gap: 8px; }
+    .object { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
+    .object.fresh { border-style: dashed; border-color: var(--accent); }
+    .object h3 { margin: 0 0 6px; font-size: 13px; }
+    .object dl, .vars { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font: 13px var(--mono); }
+    .object dt { color: var(--muted); }
+    .object dd, .vars dd { margin: 0; }
+    .object .ptr { color: var(--info); }
+    .object dt.new, .object dd.new { color: var(--good); font-weight: 700; }
+    .object dt.hit, .object dd.hit { color: var(--accent); font-weight: 700; }
+    .vars-label { margin-top: 14px; }
+    .vars .empty { color: var(--muted); font-style: italic; grid-column: 1 / -1; }
+    .note { margin: 12px 0 0; min-height: 4.5em; font-size: 14px; }
+    #out { min-height: 1.6em; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <button class="btn" id="prev" type="button">Back</button>
+    <output id="counter"></output>
+    <button class="btn btn-primary" id="next" type="button">Next step</button>
+  </div>
+  <div class="stage">
+    <div class="left">
+      <ol class="panel code-list" id="code"></ol>
+      <div class="panel"><p class="label">Console</p><pre class="code" id="out"></pre></div>
+    </div>
+    <div class="panel right">
+      <p class="label">Objects in memory</p>
+      <div id="objects"></div>
+      <p class="label vars-label">Variables</p>
+      <dl class="vars" id="vars"></dl>
+      <p class="note" id="note" aria-live="polite"></p>
+    </div>
+  </div>
+  <script>
+    'use strict';
+    const CODE = [
+      'function Person(name) {',
+      '  this.name = name;',
+      '}',
+      'Person.prototype.greet = function () {',
+      '  return `Hi, I am ${this.name}`;',
+      '};',
+      "const ada = new Person('Ada');",
+      'ada.greet();',
+    ];
+    // A row: [key, value, flags]; flags: 'new' (just changed), 'ptr' (points to another object), 'hit' (on the path of a lookup)
+    const fn = { id: 'Person', title: 'Person (a function)', rows: [['prototype', '→ Person.prototype', 'ptr']] };
+    const protoBefore = { id: 'proto', title: 'Person.prototype', rows: [['constructor', '→ Person', 'ptr'], ['[[Prototype]]', '→ Object.prototype', 'ptr']] };
+    const proto = { id: 'proto', title: 'Person.prototype', rows: [['constructor', '→ Person', 'ptr'], ['greet', 'ƒ ()'], ['[[Prototype]]', '→ Object.prototype', 'ptr']] };
+    const STEPS = [
+      { lines: [0, 1, 2], objects: [fn, protoBefore], vars: {}, note: 'Declaring a function also creates an object for it: Person.prototype. Its constructor property points back to Person.' },
+      { lines: [3, 4, 5], objects: [fn, { ...proto, rows: [proto.rows[0], ['greet', 'ƒ ()', 'new'], proto.rows[2]] }], vars: {}, note: 'greet is stored once, on Person.prototype. Every object made by new Person will share it.' },
+      { lines: [6], step: 1, objects: [fn, proto, { id: 'obj', title: 'a new object', rows: [['[[Prototype]]', '(not linked yet)', 'new']], fresh: true }], vars: {}, note: 'Step 1: new creates an empty object.' },
+      { lines: [6], step: 2, objects: [fn, proto, { id: 'obj', title: 'a new object', rows: [['[[Prototype]]', '→ Person.prototype', 'ptr new']] }], vars: {}, note: 'Step 2: its [[Prototype]] is set to Person.prototype, the object that the function’s prototype property points to. (The engine does steps 1 and 2 in one go.)' },
+      { lines: [0, 1], step: 3, objects: [fn, proto, { id: 'obj', title: 'a new object (this)', rows: [['name', "'Ada'", 'new'], ['[[Prototype]]', '→ Person.prototype', 'ptr']] }], vars: {}, note: "Step 3: Person runs with this set to the new object. this.name = name adds an own property to it." },
+      { lines: [6], step: 4, objects: [fn, proto, { id: 'obj', title: 'ada', rows: [['name', "'Ada'"], ['[[Prototype]]', '→ Person.prototype', 'ptr']] }], vars: { ada: '→ the new object' }, note: 'Step 4: Person returned nothing, so new returns the object. (Had Person returned another object, new would return that instead.)' },
+      { lines: [7], objects: [fn, { ...proto, rows: [proto.rows[0], ['greet', 'ƒ ()', 'hit'], proto.rows[2]] }, { id: 'obj', title: 'ada', rows: [['name', "'Ada'"], ['[[Prototype]]', '→ Person.prototype', 'ptr hit']] }], vars: { ada: '→ the new object' }, out: 'Hi, I am Ada', note: 'ada.greet: ada has no own greet, so the lookup follows [[Prototype]] to Person.prototype and finds it there. It is called as ada.greet(), so this is ada.' },
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    let i = 0;
+    function render() {
+      const step = STEPS[i];
+      $('code').replaceChildren(...CODE.map((text, n) => Object.assign(document.createElement('li'), { textContent: text, className: step.lines.includes(n) ? 'current' : '' })));
+      $('objects').replaceChildren(...step.objects.map((object) => {
+        const box = document.createElement('section');
+        box.className = 'object' + (object.fresh ? ' fresh' : '');
+        box.append(Object.assign(document.createElement('h3'), { textContent: object.title }));
+        const dl = document.createElement('dl');
+        for (const [key, value, flags = ''] of object.rows) {
+          const cls = flags.split(' ').filter(Boolean).join(' ');
+          dl.append(Object.assign(document.createElement('dt'), { textContent: key, className: cls }), Object.assign(document.createElement('dd'), { textContent: value, className: cls }));
+        }
+        box.append(dl);
+        return box;
+      }));
+      const vars = Object.entries(step.vars);
+      $('vars').replaceChildren(...(vars.length ? vars.flatMap(([k, v]) => [Object.assign(document.createElement('dt'), { textContent: k }), Object.assign(document.createElement('dd'), { textContent: v })]) : [Object.assign(document.createElement('dd'), { textContent: '(none yet)', className: 'empty' })]));
+      $('out').textContent = STEPS.slice(0, i + 1).findLast((s) => s.out)?.out ?? '';
+      $('note').textContent = step.note;
+      $('counter').textContent = `Step ${i + 1} of ${STEPS.length}`;
+      $('prev').disabled = i === 0;
+      $('next').disabled = i === STEPS.length - 1;
+    }
+    $('next').addEventListener('click', () => { i++; render(); });
+    $('prev').addEventListener('click', () => { i--; render(); });
+    render();
+  </script>
+</body>
+</html>
