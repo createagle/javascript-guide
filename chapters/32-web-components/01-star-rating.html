@@ -89,7 +89,6 @@
         this.#stars.className = 'stars';
         this.#stars.setAttribute('part', 'stars');
         root.append(this.#stars);
-        this.#aria('role', 'slider');
         root.addEventListener('click', (event) => {
           const star = event.target.closest('[data-value]');
           if (star) this.#choose(Number(star.dataset.value));
@@ -109,6 +108,7 @@
       connectedCallback() {
         write(this.id, 'connectedCallback()');
         this.#initial = this.value;
+        this.#aria('role', 'slider');                    // not in the constructor: it may add an attribute
         if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
         this.#render();
       }
