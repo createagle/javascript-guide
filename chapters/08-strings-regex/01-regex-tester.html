@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>8-1 Regex Tester</title>
+  <style>
+    .stage { width: min(960px, 100%); }
+    .stage > * { flex: 1 1 340px; }
+    .inputs { display: grid; gap: 6px; align-content: start; }
+    .results { display: grid; gap: 16px; }
+    .pattern { display: flex; align-items: center; gap: 4px; font: 15px var(--mono); }
+    .pattern input { font: 14px var(--mono); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); }
+    #pattern { flex: 1; min-width: 0; }
+    textarea, #replacement { font: 14px/1.5 var(--mono); padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); width: 100%; }
+    .label { margin-top: 8px; }
+    .hint { font-weight: 400; }
+    .error { margin: 0; min-height: 1.2em; font-size: 13px; }
+    .highlight { font: 14px/1.8 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+    mark { background: color-mix(in oklch, var(--accent) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+    mark.empty { background: color-mix(in oklch, var(--warn) 30%, transparent); }
+    .details { margin: 0; padding-left: 28px; font: 13px/1.6 var(--mono); max-height: 200px; overflow: auto; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="preset">Preset</label>
+    <select id="preset" class="btn"></select>
+  </div>
+  <div class="stage">
+    <div class="panel inputs">
+      <label class="label" for="pattern">Pattern</label>
+      <div class="pattern"><span>/</span><input id="pattern" spellcheck="false" autocomplete="off"><span>/</span><input id="flags" aria-label="Flags" spellcheck="false" autocomplete="off" size="5"></div>
+      <p class="error bad" id="error" role="alert"></p>
+      <label class="label" for="text">Text</label>
+      <textarea id="text" rows="5" spellcheck="false"></textarea>
+      <label class="label" for="replacement">Replace with <span class="hint">($1, $&lt;name&gt;, $&amp;)</span></label>
+      <input id="replacement" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="results">
+      <div class="panel">
+        <p class="label">Matches <output id="count"></output></p>
+        <div class="highlight" id="highlight" aria-live="polite"></div>
+      </div>
+      <div class="panel">
+        <p class="label">Details</p>
+        <ol class="details" id="details"></ol>
+      </div>
+      <div class="panel">
+        <p class="label"><code>text.replace(pattern, replacement)</code></p>
+        <pre class="code" id="replaced"></pre>
+      </div>
+    </div>
+  </div>
+  <script>
+    const presets = [
+      ['ISO dates with named groups', String.raw`(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})`, 'g', 'Released 2015-06-17, updated 2026-10-15.\nNot a date: 2026-1-5', '$<day>/$<month>/$<year>'],
+      ['Words starting with a capital', String.raw`\b[A-Z][a-z]+\b`, 'g', 'Ada and Grace met Linus in London.', '[$&]'],
+      ['Case-insensitive search', 'java(script)?', 'gi', 'Java, JavaScript and JAVASCRIPT are spelled differently.', '<$&>'],
+      ['Prices', String.raw`\$(\d+)(?:\.(\d{2}))?`, 'g', 'Tea $3, cake $6.50, coffee $4.25', '€$1'],
+      ['Lines (m flag)', '^- (.+)$', 'gm', 'Shopping list:\n- milk\n- eggs\n- bread', '* $1'],
+      ['Any letter (u flag)', String.raw`\p{L}+`, 'gu', 'naïve café, 東京, Москва 2026', '[$&]'],
+      ['Set subtraction (v flag)', String.raw`[\p{L}--[a-zA-Z]]`, 'gv', 'résumé, Zürich, smörgåsbord', '_'],
+      ['Lookahead: numbers before px', String.raw`\d+(?=px)`, 'g', 'margin: 12px 4em 0 8px', '($&)'],
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    for (const [name] of presets) $('preset').add(new Option(name));
+
+    function load(i) {
+      const [, pattern, flags, text, replacement] = presets[i];
+      $('pattern').value = pattern;
+      $('flags').value = flags;
+      $('text').value = text;
+      $('replacement').value = replacement;
+      run();
+    }
+
+    function run() {
+      const text = $('text').value;
+      let re;
+      try {
+        re = new RegExp($('pattern').value, $('flags').value);
+        $('error').textContent = '';
+      } catch (error) {
+        $('error').textContent = error.message;
+        return;
+      }
+      // matchAll needs the g flag; without it there is at most one match
+      const matches = re.global ? [...text.matchAll(re)] : [re.exec(text)].filter(Boolean);
+      $('count').textContent = `(${matches.length})`;
+
+      // Highlight by building text nodes and <mark>s: never innerHTML with user text
+      const out = [];
+      let last = 0;
+      for (const m of matches) {
+        out.push(document.createTextNode(text.slice(last, m.index)));
+        const mark = document.createElement('mark');
+        mark.textContent = m[0] || '∅';
+        if (!m[0]) mark.className = 'empty';
+        out.push(mark);
+        last = m.index + m[0].length;
+      }
+      out.push(document.createTextNode(text.slice(last)));
+      $('highlight').replaceChildren(...out);
+
+      $('details').replaceChildren(...matches.slice(0, 50).map((m) => {
+        const li = document.createElement('li');
+        const groups = m.slice(1).map((g, i) => `$${i + 1} = ${g === undefined ? 'undefined' : `'${g}'`}`);
+        const named = m.groups ? Object.entries(m.groups).map(([k, v]) => `${k}: '${v}'`) : [];
+        li.textContent = `'${m[0]}' at ${m.index}` + (groups.length ? ` · ${groups.join(', ')}` : '') + (named.length ? ` · groups { ${named.join(', ')} }` : '');
+        return li;
+      }));
+      $('replaced').textContent = text.replace(re, $('replacement').value);
+    }
+
+    $('preset').addEventListener('change', (e) => load(e.target.selectedIndex));
+    for (const id of ['pattern', 'flags', 'text', 'replacement']) $(id).addEventListener('input', run);
+    load(0);
+  </script>
+</body>
+</html>

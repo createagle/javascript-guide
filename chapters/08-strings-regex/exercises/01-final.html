@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 8-1 · Final: Title Case</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 8-1">
+    <script type="text/plain" class="code">
+      // Capitalize the first letter of every word and lowercase the rest.
+      // Keep the spaces exactly as they are.
+      // titleCase('the QUICK  brown fox') → 'The Quick  Brown Fox'
+      function titleCase(text) {
+        // \S+ matches a run of non-space characters: one word
+        return text.replace(/\S+/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
+      }
+
+      console.log(titleCase('the QUICK  brown fox'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('capitalizes each word', () => assert.equal(titleCase('hello world'), 'Hello World'));
+      test('lowercases the rest of each word', () => assert.equal(titleCase('HELLO wORLD'), 'Hello World'));
+      test('keeps extra spaces', () => assert.equal(titleCase('a  b'), 'A  B'));
+      test('works with one word and with an empty string', () => {
+        assert.equal(titleCase('javaScript'), 'Javascript');
+        assert.equal(titleCase(''), '');
+      });
+    </script>
+  </div>
+</body>
+</html>

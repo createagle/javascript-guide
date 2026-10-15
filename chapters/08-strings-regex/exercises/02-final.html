@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 8-2 · Final: Parse a Date With Named Groups</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 8-2">
+    <script type="text/plain" class="code">
+      // Turn 'YYYY-MM-DD' into { year, month, day } as numbers.
+      // Return null if the text is not exactly in that format.
+      function parseDate(text) {
+        const match = /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$/.exec(text);
+        if (!match) return null;
+        const { year, month, day } = match.groups;
+        return { year: Number(year), month: Number(month), day: Number(day) };
+      }
+
+      console.log(parseDate('2026-10-15'), parseDate('15/10/2026'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('parses a valid date into numbers', () => assert.deepEqual(parseDate('2026-10-15'), { year: 2026, month: 10, day: 15 }));
+      test('keeps leading zeros out of the numbers', () => assert.deepEqual(parseDate('2026-01-05'), { year: 2026, month: 1, day: 5 }));
+      test('rejects other formats', () => {
+        assert.equal(parseDate('15/10/2026'), null);
+        assert.equal(parseDate('2026-1-5'), null);
+      });
+      test('rejects extra text around the date', () => {
+        assert.equal(parseDate('on 2026-10-15'), null);
+        assert.equal(parseDate('2026-10-15!'), null);
+      });
+    </script>
+  </div>
+</body>
+</html>

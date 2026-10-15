@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 8-3 · Final: Truncate Without Breaking Emoji</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 8-3">
+    <script type="text/plain" class="code">
+      // Shorten text to at most `max` visible characters, ending with '…' when cut.
+      // The '…' counts as one of the max characters.
+      // Emoji like 👨‍👩‍👧 must never be cut in half.
+      function truncate(text, max) {
+        const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+        const graphemes = [...segmenter.segment(text)].map((s) => s.segment);
+        if (graphemes.length <= max) return text;
+        return graphemes.slice(0, max - 1).join('') + '…';
+      }
+
+      console.log(truncate('Hello, world', 6));
+      console.log(truncate('Family: 👨‍👩‍👧👨‍👩‍👧', 10));
+    </script>
+    <script type="text/plain" class="tests">
+      const count = (s) => [...new Intl.Segmenter().segment(s)].length;
+      test('keeps short text unchanged', () => assert.equal(truncate('Hi', 5), 'Hi'));
+      test('cuts long text and adds …', () => assert.equal(truncate('Hello, world', 6), 'Hello…'));
+      test('counts an emoji as one character', () => assert.equal(truncate('👨‍👩‍👧👨‍👩‍👧', 2), '👨‍👩‍👧👨‍👩‍👧'));
+      test('never cuts an emoji in half', () => {
+        const result = truncate('Family: 👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧', 10);
+        assert.equal(result, 'Family: 👨‍👩‍👧…');
+        assert.equal(count(result), 10);
+      });
+    </script>
+  </div>
+</body>
+</html>

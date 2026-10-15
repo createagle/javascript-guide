@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>8-2 How Long Is a String?</title>
+  <style>
+    .stage { width: min(900px, 100%); }
+    .stage > .panel { flex: 1 1 280px; }
+    .stage > .wide { flex: 2 1 420px; }
+    #text { width: 100%; font: 20px var(--mono); padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--fg); }
+    .counts { display: grid; gap: 10px; margin: 16px 0 0; }
+    .counts div { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; align-items: baseline; }
+    .counts dt { font-size: 13px; }
+    .counts dd { margin: 0; }
+    .counts dd:nth-of-type(1) { font: 700 24px var(--mono); text-align: right; }
+    .counts .what { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; font-size: 13px; width: 100%; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { font-size: 12px; color: var(--muted); }
+    td { font-family: var(--mono); }
+    td.char { font-size: 22px; font-family: system-ui, sans-serif; }
+    .num { text-align: right; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="preset">Try</label>
+    <select id="preset" class="btn"></select>
+    <label class="control"><input type="checkbox" id="nfc"> Normalize to NFC</label>
+  </div>
+  <div class="stage">
+    <div class="panel">
+      <label class="label" for="text">Text</label>
+      <input id="text" spellcheck="false" autocomplete="off">
+      <dl class="counts">
+        <div><dt><code>text.length</code></dt><dd id="units"></dd><dd class="what">UTF-16 code units</dd></div>
+        <div><dt><code>[...text].length</code></dt><dd id="points"></dd><dd class="what">Unicode code points</dd></div>
+        <div><dt><code>Intl.Segmenter</code></dt><dd id="graphemes"></dd><dd class="what">what a reader sees as characters</dd></div>
+      </dl>
+    </div>
+    <div class="panel wide">
+      <p class="label">Each visible character, taken apart</p>
+      <div class="scroll"><table id="table"></table></div>
+    </div>
+  </div>
+  <script>
+    const presets = [
+      ['ASCII', 'hello'],
+      ['Chinese', '你好，世界'],
+      ['é as one code point', 'café'],
+      ['é as e + accent', 'café'],
+      ['An emoji', 'I ❤️ JS 😀'],
+      ['Family emoji', '👨‍👩‍👧'],
+      ['Flags', '🇨🇳🇯🇵'],
+      ['Skin tone', '👋🏽'],
+    ];
+    const $ = (id) => document.getElementById(id);
+    for (const [name] of presets) $('preset').add(new Option(name));
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const hex = (n, width) => n.toString(16).toUpperCase().padStart(width, '0');
+
+    function run() {
+      let text = $('text').value;
+      if ($('nfc').checked) text = text.normalize('NFC');
+      const graphemes = [...segmenter.segment(text)].map((s) => s.segment);
+      $('units').textContent = text.length;
+      $('points').textContent = [...text].length;
+      $('graphemes').textContent = graphemes.length;
+
+      const head = '<tr><th>Character</th><th>Code points</th><th>UTF-16 units</th><th class="num">length</th></tr>';
+      $('table').innerHTML = head;
+      for (const g of graphemes) {
+        const tr = $('table').insertRow();
+        const points = [...g].map((c) => 'U+' + hex(c.codePointAt(0), 4));
+        const units = Array.from({ length: g.length }, (_, i) => hex(g.charCodeAt(i), 4));
+        for (const [i, value] of [g, points.join(' '), units.join(' '), String(g.length)].entries()) {
+          const td = tr.insertCell();
+          td.textContent = value;
+          if (i === 0) td.className = 'char';
+          if (i === 3) td.className = 'num';
+        }
+      }
+    }
+    $('preset').addEventListener('change', (e) => { $('text').value = presets[e.target.selectedIndex][1]; run(); });
+    $('text').addEventListener('input', run);
+    $('nfc').addEventListener('change', run);
+    $('preset').selectedIndex = 3;
+    $('text').value = presets[3][1];
+    run();
+  </script>
+</body>
+</html>
