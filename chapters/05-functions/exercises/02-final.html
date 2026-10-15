@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 5-2 · Final: Build pipe()</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 5-2">
+    <script type="text/plain" class="code">
+      // pipe(f, g, h) returns a new function that runs f, then g, then h:
+      // pipe(f, g, h)(x) === h(g(f(x)))
+      // pipe() with no functions returns its input unchanged.
+      function pipe(...fns) {
+        return (input) => {
+          let value = input;
+          for (const fn of fns) value = fn(value);
+          return value;
+        };
+      }
+
+      const addOne = (n) => n + 1;
+      const double = (n) => n * 2;
+      console.log(pipe(addOne, double)(5));   // should be 12
+    </script>
+    <script type="text/plain" class="tests">
+      const inc = (n) => n + 1;
+      const dbl = (n) => n * 2;
+      test('returns a function', () => assert.equal(typeof pipe(inc), 'function'));
+      test('runs functions left to right', () => {
+        assert.equal(pipe(inc, dbl)(5), 12);
+        assert.equal(pipe(dbl, inc)(5), 11);
+      });
+      test('works with strings', () => assert.equal(pipe((s) => s.trim(), (s) => s.toUpperCase())('  hi '), 'HI'));
+      test('pipe() returns the input', () => assert.equal(pipe()(7), 7));
+    </script>
+  </div>
+</body>
+</html>

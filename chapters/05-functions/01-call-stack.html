@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>5-1 The Call Stack</title>
+  <style>
+    .stage { width: min(880px, 100%); }
+    .stage > * { flex: 1 1 320px; }
+    .left { display: grid; gap: 16px; }
+    .code-list { margin: 0; padding: 12px 12px 12px 36px; font: 13px/1.5 var(--mono); white-space: pre; overflow-x: auto; }
+    .code-list li { padding: 3px 6px; border-radius: 6px; }
+    .code-list li.current { background: color-mix(in oklch, var(--accent) 18%, transparent); font-weight: 600; }
+    .stack { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-height: 120px; }
+    .frame { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font: 13px var(--mono); }
+    .frame strong { font-weight: 700; }
+    .frame span { color: var(--muted); }
+    .frame.top { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, var(--bg)); }
+    .note { margin: 12px 0 0; min-height: 3em; font-size: 14px; }
+    #out { min-height: 4em; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="program">Program</label>
+    <select id="program" class="btn"></select>
+    <button class="btn" id="reset" type="button">Restart</button>
+    <button class="btn" id="play" type="button">Play</button>
+    <button class="btn btn-primary" id="step" type="button">Step</button>
+  </div>
+  <div class="stage">
+    <div class="left">
+      <ol class="panel code-list" id="code" start="1"></ol>
+      <div class="panel">
+        <p class="label">Console</p>
+        <pre class="code" id="out"></pre>
+      </div>
+    </div>
+    <div class="panel stack-panel">
+      <p class="label">Call stack (top runs now)</p>
+      <ol class="stack" id="stack" reversed></ol>
+      <p class="note" id="note" aria-live="polite"></p>
+    </div>
+  </div>
+  <script>
+    // Programs are simulated with generators. `stack` holds frames { name, vars };
+    // every yield is a snapshot: [line, note]. Calls use yield* so the real recursion drives the trace.
+    let stack = [];
+    let log = () => {};
+    const snap = (line, note) => [line, note];
+
+    const programs = {
+      'Nested calls': {
+        code: [
+          'function square(n) {',
+          '  return n * n;',
+          '}',
+          'function sumOfSquares(a, b) {',
+          '  return square(a) + square(b);',
+          '}',
+          'const result = sumOfSquares(3, 4);',
+          'console.log(result);',
+        ],
+        *run() {
+          function* square(n) {
+            stack.push({ name: 'square', vars: { n } });
+            yield snap(1, `square(${n}) starts: a new frame on top of the stack`);
+            const value = n * n;
+            yield snap(1, `square returns ${value}; its frame is removed`);
+            stack.pop();
+            return value;
+          }
+          function* sumOfSquares(a, b) {
+            stack.push({ name: 'sumOfSquares', vars: { a, b } });
+            yield snap(4, `sumOfSquares(${a}, ${b}) starts`);
+            yield snap(4, `It calls square(${a}) and waits for the answer`);
+            const x = yield* square(a);
+            stack.at(-1).vars['square(a)'] = x;
+            yield snap(4, `Back in sumOfSquares with ${x}; now it calls square(${b})`);
+            const y = yield* square(b);
+            stack.at(-1).vars['square(b)'] = y;
+            yield snap(4, `${x} + ${y} = ${x + y}: sumOfSquares returns it`);
+            stack.pop();
+            return x + y;
+          }
+          stack.push({ name: '(global)', vars: {} });
+          yield snap(6, 'The script starts in the global frame');
+          const result = yield* sumOfSquares(3, 4);
+          stack.at(-1).vars.result = result;
+          yield snap(6, `result = ${result}`);
+          log(result);
+          yield snap(7, 'Print the result');
+          stack.pop();
+        },
+      },
+      'Recursion': {
+        code: [
+          'function factorial(n) {',
+          '  if (n <= 1) return 1;',
+          '  return n * factorial(n - 1);',
+          '}',
+          'console.log(factorial(4));',
+        ],
+        *run() {
+          function* factorial(n) {
+            stack.push({ name: 'factorial', vars: { n } });
+            yield snap(1, `factorial(${n}): is n <= 1? ${n <= 1}`);
+            if (n <= 1) {
+              yield snap(1, 'Base case: return 1 without another call');
+              stack.pop();
+              return 1;
+            }
+            yield snap(2, `Needs factorial(${n - 1}) first: another frame for the same function`);
+            const rest = yield* factorial(n - 1);
+            yield snap(2, `${n} * ${rest} = ${n * rest}: return it`);
+            stack.pop();
+            return n * rest;
+          }
+          stack.push({ name: '(global)', vars: {} });
+          yield snap(4, 'Call factorial(4)');
+          const value = yield* factorial(4);
+          log(value);
+          yield snap(4, `The stack unwound back to global; print ${value}`);
+          stack.pop();
+        },
+      },
+      'Stack overflow': {
+        code: [
+          'function countdown(n) {',
+          '  console.log(n);',
+          '  countdown(n - 1);   // no base case!',
+          '}',
+          'countdown(3);',
+        ],
+        *run() {
+          const LIMIT = 9;
+          stack.push({ name: '(global)', vars: {} });
+          yield snap(4, 'Call countdown(3)');
+          for (let n = 3; ; n--) {
+            if (stack.length > LIMIT) {
+              yield snap(2, 'The stack is full (real engines allow about 10 000 frames)');
+              log('RangeError: Maximum call stack size exceeded');
+              stack = [{ name: '(global)', vars: {} }];
+              yield snap(4, 'RangeError: the error unwinds every frame back to global');
+              return;
+            }
+            stack.push({ name: 'countdown', vars: { n } });
+            log(n);
+            yield snap(1, `countdown(${n}) prints ${n}`);
+            yield snap(2, `…and calls countdown(${n - 1}) without ever returning`);
+          }
+        },
+      },
+    };
+
+    const select = document.getElementById('program');
+    const codeList = document.getElementById('code');
+    const stackList = document.getElementById('stack');
+    const note = document.getElementById('note');
+    const out = document.getElementById('out');
+    const stepBtn = document.getElementById('step');
+    const playBtn = document.getElementById('play');
+    let iter, lines, timer = 0;
+
+    for (const name of Object.keys(programs)) select.add(new Option(name, name));
+
+    function render(line, text) {
+      [...codeList.children].forEach((li, i) => li.classList.toggle('current', i === line));
+      stackList.replaceChildren(...[...stack].reverse().map((frame, i) => {
+        const li = document.createElement('li');
+        li.className = i === 0 ? 'frame top' : 'frame';
+        const name = document.createElement('strong');
+        name.textContent = frame.name;
+        const vars = document.createElement('span');
+        vars.textContent = Object.entries(frame.vars).map(([k, v]) => `${k} = ${v}`).join(', ');
+        li.append(name, vars);
+        return li;
+      }));
+      note.textContent = text;
+      out.textContent = lines.join('\n');
+    }
+
+    function reset() {
+      stop();
+      const program = programs[select.value];
+      codeList.replaceChildren(...program.code.map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+      stack = [];
+      lines = [];
+      log = (v) => lines.push(String(v));
+      iter = program.run();
+      render(-1, 'Press Step to start');
+      stepBtn.disabled = playBtn.disabled = false;
+    }
+    function step() {
+      const { value, done } = iter.next();
+      if (done) {
+        render(-1, 'Finished: the stack is empty again');
+        stepBtn.disabled = playBtn.disabled = true;
+        return stop();
+      }
+      render(...value);
+    }
+    function stop() {
+      clearInterval(timer);
+      timer = 0;
+      playBtn.textContent = 'Play';
+    }
+    stepBtn.addEventListener('click', step);
+    playBtn.addEventListener('click', () => {
+      if (timer) return stop();
+      playBtn.textContent = 'Pause';
+      timer = setInterval(step, 800);
+    });
+    document.getElementById('reset').addEventListener('click', reset);
+    select.addEventListener('change', reset);
+    reset();
+  </script>
+</body>
+</html>

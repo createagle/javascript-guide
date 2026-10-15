@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>5-2 Functions as Values</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Functions">
+    <script type="text/plain" class="code" data-name="Three ways to write a function">
+      // Declaration: hoisted, so it can be called before this line
+      function add(a, b) {
+        return a + b;
+      }
+
+      // Expression: a function stored in a variable
+      const subtract = function (a, b) {
+        return a - b;
+      };
+
+      // Arrow function: short, and the body can be a single expression
+      const multiply = (a, b) => a * b;
+      const square = (n) => n * n;
+      const makePoint = (x, y) => ({ x, y });   // wrap an object literal in ()
+
+      console.log(add(2, 3), subtract(2, 3), multiply(2, 3), square(4), makePoint(1, 2));
+      console.log(add.name, add.length);
+    </script>
+    <script type="text/plain" class="code" data-name="Parameters">
+      // Missing arguments are undefined; extra ones are ignored
+      function show(a, b) {
+        console.log('a =', a, '| b =', b);
+      }
+      show(1);
+      show(1, 2, 3);
+
+      // Defaults apply when the argument is undefined (not null)
+      function greet(name = 'friend', greeting = `Hello, ${name}`) {
+        return `${greeting}!`;
+      }
+      console.log(greet(), greet('Ada'), greet(undefined, 'Hi'), greet(null));
+
+      // Rest parameters collect the remaining arguments into a real array
+      function total(label, ...amounts) {
+        return `${label}: ${amounts.reduce((sum, n) => sum + n, 0)}`;
+      }
+      console.log(total('Cart', 3, 4.5, 12));
+
+      // Spread passes an array as separate arguments
+      const prices = [3, 4.5, 12];
+      console.log(Math.max(...prices));
+    </script>
+    <script type="text/plain" class="code" data-name="Callbacks and higher-order functions">
+      // A function that takes a function
+      function repeat(times, action) {
+        for (let i = 0; i < times; i++) action(i);
+      }
+      repeat(3, (i) => console.log('step', i));
+
+      // A function that returns a function
+      function makeMultiplier(factor) {
+        return (n) => n * factor;
+      }
+      const double = makeMultiplier(2);
+      const triple = makeMultiplier(3);
+      console.log(double(5), triple(5));
+
+      // Built-in higher-order functions
+      console.log([1, 2, 3].map(double));
+      console.log([5, 12, 8, 20].filter((n) => n > 10));
+    </script>
+    <script type="text/plain" class="code" data-name="Composition">
+      const trim = (s) => s.trim();
+      const lower = (s) => s.toLowerCase();
+      const dashes = (s) => s.replace(/\s+/g, '-');
+
+      // pipe(f, g, h)(x) is h(g(f(x)))
+      const pipe = (...fns) => (input) => fns.reduce((value, fn) => fn(value), input);
+
+      const slugify = pipe(trim, lower, dashes);
+      console.log(slugify('  Hello JavaScript World  '));
+      console.log(['Getting Started', ' Pure Functions '].map(slugify));
+    </script>
+    <script type="text/plain" class="code" data-name="Pure and impure">
+      // Impure: reads and changes state outside itself
+      let count = 0;
+      function increment() {
+        count++;
+        return count;
+      }
+      console.log(increment(), increment());   // same call, different results
+
+      // Pure: same input, same output, no side effects
+      const incremented = (n) => n + 1;
+      console.log(incremented(1), incremented(1));
+
+      // Pure functions return new values instead of changing their input
+      const addItem = (list, item) => [...list, item];
+      const before = ['tea'];
+      const after = addItem(before, 'coffee');
+      console.log(before, after);
+    </script>
+  </div>
+</body>
+</html>

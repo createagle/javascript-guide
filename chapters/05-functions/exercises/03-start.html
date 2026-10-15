@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 5-3 · Start: Flatten With Recursion</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 5-3">
+    <script type="text/plain" class="code">
+      // Flatten nested arrays of any depth into one array, without using .flat():
+      // flatten([1, [2, [3, [4]]], 5]) → [1, 2, 3, 4, 5]
+      function flatten(items) {
+        const result = [];
+        for (const item of items) {
+          result.push(item);
+        }
+        return result;
+      }
+
+      console.log(flatten([1, [2, [3, [4]]], 5]));
+    </script>
+    <script type="text/plain" class="tests">
+      test('flattens one level', () => assert.deepEqual(flatten([1, [2, 3]]), [1, 2, 3]));
+      test('flattens any depth', () => assert.deepEqual(flatten([1, [2, [3, [4]]], 5]), [1, 2, 3, 4, 5]));
+      test('keeps an already flat array', () => assert.deepEqual(flatten(['a', 'b']), ['a', 'b']));
+      test('handles empty arrays', () => assert.deepEqual(flatten([[], [[]], 1]), [1]));
+      test('does not change the input', () => {
+        const input = [1, [2]];
+        flatten(input);
+        assert.deepEqual(input, [1, [2]]);
+      });
+      test('does not use .flat()', () => assert.ok(!flatten.toString().includes('.flat('), 'flatten uses .flat()'));
+    </script>
+  </div>
+</body>
+</html>

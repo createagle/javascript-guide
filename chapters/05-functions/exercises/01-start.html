@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 5-1 · Start: Default Parameters</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 5-1">
+    <script type="text/plain" class="code">
+      // formatPrice(9.5)               → 'USD 9.50'
+      // formatPrice(9.5, 'EUR')        → 'EUR 9.50'
+      // formatPrice(9.5, 'JPY', 0)     → 'JPY 10'
+      // formatPrice(9.5, undefined, 1) → 'USD 9.5'
+      function formatPrice(amount, currency, decimals) {
+        return currency + ' ' + amount.toFixed(decimals);
+      }
+
+      console.log(formatPrice(9.5), formatPrice(9.5, 'JPY', 0));
+    </script>
+    <script type="text/plain" class="tests">
+      test('uses USD and 2 decimals by default', () => assert.equal(formatPrice(9.5), 'USD 9.50'));
+      test('accepts a currency', () => assert.equal(formatPrice(9.5, 'EUR'), 'EUR 9.50'));
+      test('accepts 0 decimals', () => assert.equal(formatPrice(9.5, 'JPY', 0), 'JPY 10'));
+      test('undefined falls back to the default', () => assert.equal(formatPrice(9.5, undefined, 1), 'USD 9.5'));
+    </script>
+  </div>
+</body>
+</html>
