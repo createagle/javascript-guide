@@ -1,0 +1,33 @@
+{
+  "name": "wordfreq",
+  "version": "1.0.0",
+  "description": "Count the most frequent words in text files",
+  "type": "module",
+  "bin": {
+    "wordfreq": "./bin/wordfreq.js"
+  },
+  "exports": "./src/count.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bin/wordfreq.js sample.txt",
+    "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc",
+    "dev": "vite",
+    "build": "vite build",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}

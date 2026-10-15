@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 37-2 · Final: Does This Version Match?</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 37-2">
+    <script type="text/plain" class="code">
+      // satisfies(version, range) says whether a version like '1.4.2' matches a package.json range:
+      //   '1.4.2'            exactly that version
+      //   '^1.4.2'           >=1.4.2 <2.0.0   (for 0.x: ^0.4.2 means >=0.4.2 <0.5.0, ^0.0.4 means exactly 0.0.4)
+      //   '~1.4.2'           >=1.4.2 <1.5.0
+      //   '1.x', '1.4.x', '*'    any version with those leading numbers
+      //   '>=1.2.0 <1.5.0'   comparators separated by spaces must ALL hold (>, >=, <, <=, =)
+      //   '^1.0.0 || ^2.0.0' either side may match
+      // Versions here have no pre-release label.
+      const parse = (v) => v.split('.').map(Number);
+
+      // Compare two versions: negative, 0 or positive, like a sort comparator
+      function compare(a, b) {
+        const [x, y] = [parse(a), parse(b)];
+        return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+      }
+
+      // Turn one part of a range into a list of [operator, version] comparators
+      function comparators(part) {
+        if (part === '*' || part === 'x') return [];
+        const [op, rest] = /^([<>]=?|=|\^|~)?(.*)$/.exec(part).slice(1);
+        const nums = rest.split('.');
+        const wild = nums.findIndex((n) => n === 'x' || n === '*');
+        if (wild !== -1) {                                  // 1.x → >=1.0.0 <2.0.0
+          const lower = nums.slice(0, wild).map(Number);
+          const upper = [...lower];
+          upper[wild - 1]++;
+          const pad = (list) => [...list, 0, 0, 0].slice(0, 3).join('.');
+          return [['>=', pad(lower)], ['<', pad(upper)]];
+        }
+        const [M, m, p] = nums.map(Number);
+        if (op === '^') {
+          const upper = M > 0 ? `${M + 1}.0.0` : m > 0 ? `0.${m + 1}.0` : `0.0.${p + 1}`;
+          return [['>=', rest], ['<', upper]];
+        }
+        if (op === '~') return [['>=', rest], ['<', `${M}.${m + 1}.0`]];
+        return [[op ?? '=', rest]];
+      }
+
+      const TESTS = {
+        '=': (c) => c === 0, '>': (c) => c > 0, '>=': (c) => c >= 0, '<': (c) => c < 0, '<=': (c) => c <= 0,
+      };
+
+      function satisfies(version, range) {
+        return range.split('||').some((alternative) =>
+          alternative.trim().split(/\s+/).filter(Boolean).flatMap(comparators)
+            .every(([op, target]) => TESTS[op](compare(version, target))));
+      }
+
+      console.table(['1.4.2', '1.9.0', '2.0.0'].map((v) => ({ version: v, '^1.4.2': satisfies(v, '^1.4.2'), '~1.4.2': satisfies(v, '~1.4.2') })));
+    </script>
+    <script type="text/plain" class="tests">
+      const check = (range, yes, no) => {
+        for (const v of yes) assert.equal(satisfies(v, range), true, `${v} should match ${range}`);
+        for (const v of no) assert.equal(satisfies(v, range), false, `${v} should not match ${range}`);
+      };
+      test('an exact version', () => check('1.4.2', ['1.4.2'], ['1.4.3', '1.4.1']));
+      test('caret', () => {
+        check('^1.4.2', ['1.4.2', '1.4.9', '1.10.0', '1.99.99'], ['1.4.1', '2.0.0', '0.9.9']);
+        check('^0.4.2', ['0.4.2', '0.4.10'], ['0.5.0', '0.4.1', '1.0.0']);
+        check('^0.0.4', ['0.0.4'], ['0.0.5', '0.1.0']);
+      });
+      test('tilde', () => check('~1.4.2', ['1.4.2', '1.4.30'], ['1.5.0', '1.4.1']));
+      test('wildcards', () => {
+        check('1.x', ['1.0.0', '1.9.9'], ['2.0.0', '0.9.0']);
+        check('1.4.x', ['1.4.0', '1.4.7'], ['1.5.0']);
+        check('*', ['0.0.1', '99.0.0'], []);
+      });
+      test('comparators', () => {
+        check('>=1.2.0 <1.5.0', ['1.2.0', '1.4.9'], ['1.5.0', '1.1.9']);
+        check('>1.2.0', ['1.2.1'], ['1.2.0']);
+        check('<=2.0.0', ['2.0.0', '1.0.0'], ['2.0.1']);
+      });
+      test('either side of ||', () => check('^1.0.0 || ^3.0.0', ['1.2.3', '3.1.0'], ['2.0.0', '4.0.0']));
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wordfreq</title>
+    <link rel="stylesheet" href="./src/style.css" />
+    <script type="module" src="./src/main.js"></script>
+  </head>
+  <body>
+    <form id="form">
+      <label for="text">Text</label>
+      <textarea id="text" rows="8">
+It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity.</textarea>
+      <label>Top <input id="top" type="number" min="1" max="50" value="5" /></label>
+    </form>
+    <ol id="result" aria-live="polite"></ol>
+  </body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>37-2 Type Checking with JSDoc</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; width: min(1000px, 100%); align-items: start; }
+    .layout .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+    .controls .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    pre { margin: 0; padding: 10px 12px; border-radius: 8px; font: 12px/1.55 var(--mono); overflow: auto; white-space: pre; }
+    .code { background: var(--surface); }
+    .line { display: block; }
+    .line.flagged { background: color-mix(in srgb, var(--bad) 18%, transparent); box-shadow: inset 3px 0 var(--bad); }
+    .terminal { background: #1c1917; color: #e7e5e4; white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls" role="group" aria-label="Example">
+    <button class="btn" type="button" data-file="01-no-types.js" aria-pressed="true">1. No types</button>
+    <button class="btn" type="button" data-file="02-jsdoc.js" aria-pressed="false">2. JSDoc types</button>
+    <button class="btn" type="button" data-file="03-fixed.js" aria-pressed="false">3. Fixed</button>
+  </div>
+  <div class="layout">
+    <section class="panel" aria-labelledby="code-title">
+      <p class="label" id="code-title"></p>
+      <pre class="code" id="code" tabindex="0"></pre>
+    </section>
+    <section class="panel" aria-labelledby="out-title">
+      <p class="label" id="out-title">TypeScript 7 checking the file (recorded output)</p>
+      <pre class="terminal" id="tsc" tabindex="0"></pre>
+      <p class="label">Running it with Node.js</p>
+      <pre class="terminal" id="node" tabindex="0"></pre>
+    </section>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const OUTPUT = {
+      "01-no-types.js": {
+            "tsc": "01-no-types.js(2,23): error TS7006: Parameter 'items' implicitly has an 'any' type.\n01-no-types.js(3,24): error TS7006: Parameter 'sum' implicitly has an 'any' type.\n01-no-types.js(3,29): error TS7006: Parameter 'item' implicitly has an 'any' type.\n01-no-types.js(7,24): error TS2551: Property 'itmes' does not exist on type '{ items: { name: string; price: string; qty: number; }[]; }'. Did you mean 'items'?",
+            "node": "file:///…/01-no-types.js:3\n  return items.reduce((sum, item) => sum + item.price * item.qty, 0);\n               ^\n\nTypeError: Cannot read properties of undefined (reading 'reduce')"
+      },
+      "02-jsdoc.js": {
+            "tsc": "02-jsdoc.js(18,39): error TS2322: Type 'string' is not assignable to type 'number'.\n02-jsdoc.js(19,24): error TS2551: Property 'itmes' does not exist on type '{ items: Item[]; }'. Did you mean 'items'?",
+            "node": null
+      },
+      "03-fixed.js": {
+            "tsc": "",
+            "node": "3"
+      }
+};
+
+    async function show(file) {
+      for (const button of document.querySelectorAll('[data-file]')) button.setAttribute('aria-pressed', String(button.dataset.file === file));
+      $('code-title').textContent = `jsdoc/${file}`;
+      try {
+        const response = await fetch(`jsdoc/${file}`);
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        const lines = (await response.text()).trimEnd().split('\n');
+        // Number the lines, and mark the ones TypeScript complains about
+        const flagged = new Set([...OUTPUT[file].tsc.matchAll(/\((\d+),\d+\)/g)].map((m) => Number(m[1])));
+        $('code').replaceChildren(...lines.map((line, i) => {
+          const row = document.createElement('span');
+          row.className = flagged.has(i + 1) ? 'line flagged' : 'line';
+          row.textContent = `${String(i + 1).padStart(2)}  ${line}\n`;
+          return row;
+        }));
+      } catch (error) {
+        $('code').textContent = `Could not load ${file}: ${error.message}`;
+      }
+      const { tsc, node } = OUTPUT[file];
+      $('tsc').textContent = `$ npx tsc --noEmit --allowJs --checkJs --strict ${file}\n${tsc || '(no errors)'}`;
+      $('node').textContent = `$ node ${file}\n${node ?? '(not run: fix the type errors first)'}`;
+    }
+    document.querySelector('.controls').addEventListener('click', (event) => {
+      const file = event.target.closest('[data-file]')?.dataset.file;
+      if (file) show(file);
+    });
+    show('01-no-types.js');
+  </script>
+</body>
+</html>

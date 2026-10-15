@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 37-1 · Start: Bump a Version Number</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 37-1">
+    <script type="text/plain" class="code">
+      // bump(version, part) returns the next version under semantic versioning, MAJOR.MINOR.PATCH[-PRERELEASE]:
+      // - 'patch': 1.4.2 → 1.4.3      'minor': 1.4.2 → 1.5.0      'major': 1.4.2 → 2.0.0
+      // - a pre-release is a version *before* its release, so bumping to that release just drops the label:
+      //   bump('1.4.3-beta.1', 'patch') → '1.4.3'   bump('1.5.0-rc.2', 'minor') → '1.5.0'   bump('2.0.0-alpha', 'major') → '2.0.0'
+      //   but bump('1.4.3-beta.1', 'minor') → '1.5.0' (1.4.3 is not a minor release)
+      // - 'prerelease': adds 1 to the last number of the label, or starts one: 2.0.0-beta.1 → 2.0.0-beta.2, 1.4.2 → 1.4.3-0
+      // - anything that is not a valid version (like '1.2' or 'v1.2.3') throws a TypeError
+      function bump(version, part) {
+        const [major, minor, patch] = version.split('.').map(Number);
+        if (part === 'major') return `${major + 1}.${minor}.${patch}`;
+        if (part === 'minor') return `${major}.${minor + 1}.${patch}`;
+        return `${major}.${minor}.${patch + 1}`;
+      }
+
+      for (const part of ['patch', 'minor', 'major', 'prerelease']) console.log(`${part}: 1.4.2 → ${bump('1.4.2', part)}`);
+    </script>
+    <script type="text/plain" class="tests">
+      test('patch, minor and major', () => {
+        assert.equal(bump('1.4.2', 'patch'), '1.4.3');
+        assert.equal(bump('1.4.2', 'minor'), '1.5.0');
+        assert.equal(bump('1.4.2', 'major'), '2.0.0');
+        assert.equal(bump('0.9.12', 'minor'), '0.10.0');
+      });
+      test('a pre-release becomes its release', () => {
+        assert.equal(bump('1.4.3-beta.1', 'patch'), '1.4.3');
+        assert.equal(bump('1.5.0-rc.2', 'minor'), '1.5.0');
+        assert.equal(bump('2.0.0-alpha', 'major'), '2.0.0');
+      });
+      test('…unless the release is of a different kind', () => {
+        assert.equal(bump('1.4.3-beta.1', 'minor'), '1.5.0');
+        assert.equal(bump('1.5.0-rc.2', 'major'), '2.0.0');
+      });
+      test('prerelease', () => {
+        assert.equal(bump('2.0.0-beta.1', 'prerelease'), '2.0.0-beta.2');
+        assert.equal(bump('1.4.2', 'prerelease'), '1.4.3-0');
+        assert.equal(bump('3.0.0-rc', 'prerelease'), '3.0.0-rc.0');
+      });
+      test('invalid versions throw a TypeError', () => {
+        for (const bad of ['1.2', 'v1.2.3', '01.2.3', '1.2.3.4', '']) {
+          assert.throws(() => bump(bad, 'patch'), TypeError, `accepted "${bad}"`);
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>

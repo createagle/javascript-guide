@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>37-1 A Small Node.js Project</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; width: min(1000px, 100%); align-items: start; }
+    .layout .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+    .files { grid-row: span 2; }
+    .file-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .file-list .btn { font: 12px var(--mono); padding: 3px 8px; }
+    .file-list .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    pre { margin: 0; padding: 10px 12px; border-radius: 8px; font: 12px/1.55 var(--mono); overflow: auto; max-height: 420px; white-space: pre; }
+    .code { background: var(--surface); }
+    .terminal { background: #1c1917; color: #e7e5e4; min-height: 160px; }
+    textarea { font: 14px/1.5 system-ui, sans-serif; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+    .control { flex-wrap: wrap; max-width: 100%; }
+    #command { max-width: 100%; min-width: 0; }
+    .control input { width: 4.5em; font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+    #result { margin: 0; padding-left: 1.6em; font-size: 14px; }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <section class="panel files" aria-labelledby="files-title">
+      <p class="label" id="files-title">wordfreq/</p>
+      <div class="file-list" id="file-list"></div>
+      <pre class="code" id="file" tabindex="0" aria-live="polite"></pre>
+    </section>
+    <section class="panel" aria-labelledby="term-title">
+      <p class="label" id="term-title">Terminal (recorded output)</p>
+      <label class="control">Command
+        <select class="btn" id="command"></select></label>
+      <pre class="terminal" id="terminal" tabindex="0"></pre>
+    </section>
+    <section class="panel try" aria-labelledby="try-title">
+      <p class="label" id="try-title">The same <code>topWords()</code>, running in this page</p>
+      <textarea id="text" rows="4" aria-label="Text to count">It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness.</textarea>
+      <div class="row">
+        <label class="control">Top <input id="top" type="number" min="1" max="20" value="5"></label>
+        <label class="control">Min length <input id="min" type="number" min="1" max="10" value="3"></label>
+      </div>
+      <ol id="result"></ol>
+    </section>
+  </div>
+  <script type="module">
+    // The project's own module, imported straight from its folder: no build step needed
+    import { topWords } from './wordfreq/src/count.js';
+    import { STOP_WORDS } from './wordfreq/src/stop-words.js';
+
+    const $ = (id) => document.getElementById(id);
+    const FILES = ["package.json", "src/count.js", "src/stop-words.js", "bin/wordfreq.js", "test/count.test.js", "index.html", "src/main.js", "eslint.config.js", ".prettierrc.json", "tsconfig.json", "vite.config.js", ".gitignore"];
+
+    // Output recorded by running each command in the project folder
+    const OUTPUT = {
+      "npm test": "▶ countWords\n  ✔ ignores case and punctuation (12.434226ms)\n  ✔ leaves out short words and stop words (0.386835ms)\n  ✔ splits Chinese text into words (1.599018ms)\n✔ countWords (16.41926ms)\n▶ topWords\n  ✔ most frequent first, equal counts in alphabetical order (0.430642ms)\n  ✔ returns fewer rows when there are fewer words (1.001226ms)\n✔ topWords (1.695418ms)\nℹ tests 5\nℹ suites 2\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 128.802451",
+      "npm start": "     2  age\n     2  all\n     2  before\n     2  direct\n     2  epoch\n     2  going\n     2  season\n     2  times\n     1  belief\n     1  best",
+      "node bin/wordfreq.js --top 3 --min-length 5 sample.txt": "     2  before\n     2  direct\n     2  epoch",
+      "node bin/wordfreq.js missing.txt": "wordfreq: cannot read missing.txt (ENOENT)",
+      "npm run lint": "",
+      "npm run format:check": "Checking formatting...\nAll matched files use Prettier code style!",
+      "npm run typecheck": "",
+      "npm run build": "vite v8.3.4 building client environment for production...\ntransforming...\n✓ 7 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                 0.78 kB │ gzip: 0.43 kB\ndist/assets/index-DzxV6ouB.css  0.14 kB │ gzip: 0.14 kB\ndist/assets/index-CBZoXRn6.js   1.62 kB │ gzip: 0.87 kB\n\n✓ built in 160ms"
+};
+
+    async function showFile(path) {
+      for (const button of $('file-list').children) button.setAttribute('aria-pressed', String(button.dataset.path === path));
+      try {
+        const response = await fetch(`wordfreq/${path}`);
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        $('file').textContent = await response.text();
+      } catch (error) {
+        $('file').textContent = `Could not load ${path}: ${error.message}`;
+      }
+    }
+    $('file-list').append(...FILES.map((path) => Object.assign(document.createElement('button'), {
+      type: 'button', className: 'btn', textContent: path,
+    })));
+    for (const button of $('file-list').children) button.dataset.path = button.textContent;
+    $('file-list').addEventListener('click', (event) => {
+      const path = event.target.closest('button')?.dataset.path;
+      if (path) showFile(path);
+    });
+
+    $('command').append(...Object.keys(OUTPUT).map((command) => new Option(command, command)));
+    function showCommand() {
+      const command = $('command').value;
+      $('terminal').textContent = `$ ${command}\n${OUTPUT[command] || '(no output: nothing to report)'}`;
+    }
+    $('command').addEventListener('change', showCommand);
+
+    function count() {
+      const rows = topWords($('text').value, $('top').valueAsNumber || 5, { minLength: $('min').valueAsNumber || 1, stopWords: STOP_WORDS });
+      $('result').replaceChildren(...rows.map(([word, n]) => Object.assign(document.createElement('li'), { textContent: `${word} (${n})` })));
+    }
+    document.querySelector('.try').addEventListener('input', count);
+
+    showFile('package.json');
+    showCommand();
+    count();
+  </script>
+</body>
+</html>

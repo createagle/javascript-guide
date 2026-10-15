@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 37-3 · Final: Read Command Line Arguments</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 37-3">
+    <script type="text/plain" class="code">
+      // parseArgs(argv, { booleans = [], strings = [], aliases = {} }) reads command line arguments,
+      // like process.argv.slice(2), into { values, positionals }:
+      // - booleans: '--verbose' → true, '--no-verbose' → false
+      // - strings: '--top=5' or '--top 5' → '5' (a string option without a value throws an Error)
+      // - aliases: { n: 'top' } makes '-n 5' mean '--top 5'
+      // - everything else is a positional; after '--' everything is a positional
+      // - an option that is not declared throws an Error mentioning it
+      function parseArgs(argv, { booleans = [], strings = [], aliases = {} } = {}) {
+        const values = {};
+        const positionals = [];
+        for (let i = 0; i < argv.length; i++) {
+          const arg = argv[i];
+          if (arg === '--') {                              // the rest are positionals, even if they start with -
+            positionals.push(...argv.slice(i + 1));
+            break;
+          }
+          if (!arg.startsWith('-') || arg === '-') {
+            positionals.push(arg);
+            continue;
+          }
+          // '--name=value', '--name', '-n'
+          let [name, inline] = arg.startsWith('--') ? arg.slice(2).split(/=(.*)/s) : [arg.slice(1)];
+          if (!arg.startsWith('--')) name = Object.hasOwn(aliases, name) ? aliases[name] : name;
+          if (booleans.includes(name)) {
+            values[name] = true;
+          } else if (name.startsWith('no-') && booleans.includes(name.slice(3))) {
+            values[name.slice(3)] = false;
+          } else if (strings.includes(name)) {
+            const value = inline ?? argv[++i];
+            if (value === undefined) throw new Error(`Option --${name} needs a value`);
+            values[name] = value;
+          } else {
+            throw new Error(`Unknown option: ${arg}`);
+          }
+        }
+        return { values, positionals };
+      }
+
+      const parsed = parseArgs(['--top=3', '-v', 'notes.txt', '--min-length', '4', 'draft.txt'], {
+        booleans: ['verbose'], strings: ['top', 'min-length'], aliases: { v: 'verbose', n: 'top' },
+      });
+      console.log(parsed);
+    </script>
+    <script type="text/plain" class="tests">
+      const spec = { booleans: ['verbose', 'color'], strings: ['top', 'out'], aliases: { v: 'verbose', n: 'top' } };
+
+      test('booleans, and --no- to turn one off', () => {
+        assert.deepEqual(parseArgs(['--verbose', '--no-color'], spec).values, { verbose: true, color: false });
+      });
+      test('strings with = or as the next argument', () => {
+        assert.deepEqual(parseArgs(['--top=5', '--out', 'a.txt'], spec).values, { top: '5', out: 'a.txt' });
+        assert.deepEqual(parseArgs(['--out=x=y'], spec).values, { out: 'x=y' });
+      });
+      test('short aliases', () => {
+        assert.deepEqual(parseArgs(['-n', '3', '-v'], spec).values, { top: '3', verbose: true });
+      });
+      test('positionals, and everything after --', () => {
+        const { values, positionals } = parseArgs(['a.txt', '--verbose', 'b.txt', '--', '--top', '-v'], spec);
+        assert.deepEqual(positionals, ['a.txt', 'b.txt', '--top', '-v']);
+        assert.deepEqual(values, { verbose: true });
+      });
+      test('unknown options and missing values throw', () => {
+        assert.throws(() => parseArgs(['--colour'], spec), /colour/);
+        assert.throws(() => parseArgs(['-x'], spec), /-x/);
+        assert.throws(() => parseArgs(['--top'], spec), /top/);
+      });
+    </script>
+  </div>
+</body>
+</html>
