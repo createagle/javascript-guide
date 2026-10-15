@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 16-1 · Start: Prices for Every Locale</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 16-1">
+    <script type="text/plain" class="code">
+      // formatPrice(amount, currency, locale) formats money the way people in that locale expect:
+      //   formatPrice(1234.5, 'USD', 'en-US') → '$1,234.50'
+      //   formatPrice(1234.5, 'EUR', 'de-DE') → '1.234,50 €'
+      //   formatPrice(1234.5, 'JPY', 'ja-JP') → '￥1,235' (yen has no cents)
+      function formatPrice(amount, currency, locale) {
+        return '$' + amount.toFixed(2);
+      }
+
+      console.log(formatPrice(1234.5, 'USD', 'en-US'));
+      console.log(formatPrice(1234.5, 'EUR', 'de-DE'));
+      console.log(formatPrice(1234.5, 'JPY', 'ja-JP'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('US dollars', () => assert.equal(formatPrice(1234.5, 'USD', 'en-US'), '$1,234.50'));
+      test('euros in Germany: dot for thousands, comma for decimals, sign after', () => {
+        const text = formatPrice(1234.5, 'EUR', 'de-DE');
+        assert.ok(text.startsWith('1.234,50'), text);
+        assert.ok(text.endsWith('€'), text);
+      });
+      test('yen has no decimals', () => {
+        const text = formatPrice(1234.5, 'JPY', 'ja-JP');
+        assert.ok(text.includes('1,235'), text);
+        assert.ok(!text.includes('.'), text);
+      });
+      test('negative amounts', () => assert.equal(formatPrice(-5, 'USD', 'en-US'), '-$5.00'));
+    </script>
+  </div>
+</body>
+</html>

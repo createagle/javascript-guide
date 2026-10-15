@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 16-3 · Final: Add Months Without Overflow</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 16-3">
+    <script type="text/plain" class="code">
+      // addMonths('YYYY-MM-DD', n) moves a calendar date n months forward (or back when n < 0).
+      // If the day does not exist in the target month, use that month's last day:
+      //   addMonths('2026-01-31', 1) → '2026-02-28'
+      // The answer must not depend on the computer's time zone.
+      function addMonths(iso, n) {
+        // Temporal does exactly this; use it where the browser has it
+        if (typeof Temporal !== 'undefined') {
+          return Temporal.PlainDate.from(iso).add({ months: n }).toString();
+        }
+        // Otherwise work in UTC, so the computer's time zone never shifts the date
+        const [year, month, day] = iso.split('-').map(Number);
+        const target = new Date(Date.UTC(year, month - 1 + n, 1));
+        // Day 0 of the next month is the last day of this one
+        const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+        target.setUTCDate(Math.min(day, lastDay));
+        return target.toISOString().slice(0, 10);
+      }
+
+      console.log(addMonths('2026-01-31', 1));
+    </script>
+    <script type="text/plain" class="tests">
+      test('a normal month', () => assert.equal(addMonths('2026-03-15', 1), '2026-04-15'));
+      test('January 31 + 1 month', () => assert.equal(addMonths('2026-01-31', 1), '2026-02-28'));
+      test('leap year', () => assert.equal(addMonths('2024-01-31', 1), '2024-02-29'));
+      test('across a year end', () => assert.equal(addMonths('2026-12-31', 2), '2027-02-28'));
+      test('going back', () => assert.equal(addMonths('2026-03-31', -1), '2026-02-28'));
+      test('twelve months is a year', () => assert.equal(addMonths('2026-10-15', 12), '2027-10-15'));
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>16-2 Date vs Temporal</title>
+  <style>
+    .support { margin: 0; max-width: 760px; text-align: center; font-size: 14px; color: var(--muted); }
+    .list { display: grid; gap: 12px; width: min(960px, 100%); }
+    .row h2 { margin: 0 0 8px; font-size: 15px; }
+    .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+    .col pre.code { font-size: 12px; white-space: pre; word-break: normal; }
+    .out { margin: 6px 0 0; font: 600 14px var(--mono); overflow-wrap: anywhere; }
+    .out.bad { color: var(--bad); }
+    .row .note { margin: 10px 0 0; font-size: 14px; }
+  </style>
+</head>
+<body class="demo">
+  <p class="support" id="support"></p>
+  <div class="list" id="list"></div>
+  <script type="module">
+    const hasTemporal = typeof Temporal !== 'undefined';
+    const $ = (id) => document.getElementById(id);
+    $('support').textContent = hasTemporal
+      ? 'This browser supports Temporal: both columns run live.'
+      : 'This browser has no Temporal yet: the Date column runs live, the Temporal column shows the result it gives in browsers that support it.';
+
+    // expected: what the Temporal code returns (checked against the Temporal reference polyfill)
+    const SCENARIOS = [
+      {
+        title: 'Add one month to January 31',
+        date: "const d = new Date(2026, 0, 31);\nd.setMonth(d.getMonth() + 1);\nd.toDateString();",
+        runDate: () => { const d = new Date(2026, 0, 31); d.setMonth(d.getMonth() + 1); return d.toDateString(); },
+        temporal: "Temporal.PlainDate.from('2026-01-31')\n  .add({ months: 1 })\n  .toString();",
+        runTemporal: () => Temporal.PlainDate.from('2026-01-31').add({ months: 1 }).toString(),
+        expected: '2026-02-28',
+        note: 'Date overflows February 31 into March. Temporal clamps to the last day of the month.',
+      },
+      {
+        title: 'Month numbers',
+        date: 'new Date(2026, 2, 1).toDateString();',
+        runDate: () => new Date(2026, 2, 1).toDateString(),
+        temporal: "Temporal.PlainDate.from({ year: 2026, month: 2, day: 1 })\n  .toString();",
+        runTemporal: () => Temporal.PlainDate.from({ year: 2026, month: 2, day: 1 }).toString(),
+        expected: '2026-02-01',
+        note: 'Date months count from 0, so 2 is March. Temporal months count from 1, like a calendar.',
+      },
+      {
+        title: 'A date with no time',
+        date: "new Date('2026-03-10').toString();",
+        runDate: () => new Date('2026-03-10').toString(),
+        temporal: "Temporal.PlainDate.from('2026-03-10').toString();",
+        runTemporal: () => Temporal.PlainDate.from('2026-03-10').toString(),
+        expected: '2026-03-10',
+        note: 'A date-only string becomes midnight UTC. West of Greenwich that is still the 9th locally. PlainDate is just a calendar date, with no time and no zone.',
+      },
+      {
+        title: 'February 30',
+        date: 'new Date(2026, 1, 30).toDateString();',
+        runDate: () => new Date(2026, 1, 30).toDateString(),
+        temporal: "Temporal.PlainDate.from(\n  { year: 2026, month: 2, day: 30 },\n  { overflow: 'reject' },\n);",
+        runTemporal: () => Temporal.PlainDate.from({ year: 2026, month: 2, day: 30 }, { overflow: 'reject' }).toString(),
+        expected: 'RangeError',
+        note: 'Date silently rolls over into March. Temporal can reject the impossible date instead.',
+      },
+      {
+        title: 'Days from Oct 15 to Dec 25',
+        date: "const ms = new Date('2026-12-25') - new Date('2026-10-15');\nMath.round(ms / 86_400_000);",
+        runDate: () => Math.round((new Date('2026-12-25') - new Date('2026-10-15')) / 86_400_000),
+        temporal: "Temporal.PlainDate.from('2026-10-15')\n  .until('2026-12-25', { largestUnit: 'months' })\n  .toString();",
+        runTemporal: () => Temporal.PlainDate.from('2026-10-15').until('2026-12-25', { largestUnit: 'months' }).toString(),
+        expected: 'P2M10D',
+        note: 'With Date you divide milliseconds and hope no daylight-saving change is in between. Temporal returns a Duration: 2 months and 10 days.',
+      },
+      {
+        title: 'One day later, across a clock change in New York',
+        date: '// Date only knows UTC and this computer’s\n// own time zone: there is no way to say\n// "09:00 in New York".',
+        runDate: () => 'not possible',
+        temporal: "const t = Temporal.ZonedDateTime.from(\n  '2026-03-07T09:00[America/New_York]');\nt.add({ days: 1 }).toPlainTime().toString();",
+        runTemporal: () => Temporal.ZonedDateTime.from('2026-03-07T09:00[America/New_York]').add({ days: 1 }).toPlainTime().toString(),
+        expected: '09:00:00',
+        note: 'Clocks in New York move forward on March 8, so that day is 23 hours long. Adding one day keeps 09:00; adding 24 hours would give 10:00.',
+      },
+      {
+        title: 'Changing a value',
+        date: 'const start = new Date(2026, 0, 1);\nconst end = start;\nend.setDate(31);\nstart.getDate();',
+        runDate: () => { const start = new Date(2026, 0, 1); const end = start; end.setDate(31); return start.getDate(); },
+        temporal: "const start = Temporal.PlainDate.from('2026-01-01');\nconst end = start.with({ day: 31 });\nstart.day;",
+        runTemporal: () => { const start = Temporal.PlainDate.from('2026-01-01'); start.with({ day: 31 }); return start.day; },
+        expected: '1',
+        note: 'Date objects are mutable: changing end also changed start. Temporal objects never change; with() returns a new one.',
+      },
+    ];
+
+    function attempt(fn) {
+      try {
+        return { text: String(fn()), ok: true };
+      } catch (error) {
+        return { text: error.name, ok: false };
+      }
+    }
+
+    $('list').replaceChildren(...SCENARIOS.map((s) => {
+      const row = document.createElement('section');
+      row.className = 'panel row';
+      const d = attempt(s.runDate);
+      const t = hasTemporal ? attempt(s.runTemporal) : { text: s.expected, ok: s.expected !== 'RangeError', expected: true };
+      row.innerHTML = `<h2></h2><div class="cols"><div class="col"><p class="label">Date</p><pre class="code"></pre><p class="out date"></p></div><div class="col"><p class="label">Temporal</p><pre class="code"></pre><p class="out temporal"></p></div></div><p class="note"></p>`;
+      row.querySelector('h2').textContent = s.title;
+      const [codeD, codeT] = row.querySelectorAll('pre');
+      codeD.textContent = s.date;
+      codeT.textContent = s.temporal;
+      const outD = row.querySelector('.out.date');
+      outD.textContent = '→ ' + d.text;
+      outD.classList.toggle('bad', !d.ok || d.text === 'not possible');
+      const outT = row.querySelector('.out.temporal');
+      outT.textContent = '→ ' + t.text + (t.expected ? ' (expected)' : '');
+      outT.classList.toggle('bad', !t.ok);
+      row.querySelector('.note').textContent = s.note;
+      return row;
+    }));
+  </script>
+</body>
+</html>

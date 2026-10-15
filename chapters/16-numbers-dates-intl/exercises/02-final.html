@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 16-2 · Final: Add Up Money in Cents</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 16-2">
+    <script type="text/plain" class="code">
+      // totalCents(prices) adds up prices given in dollars and returns the total in whole cents.
+      // Floating point makes 0.29 * 100 equal 28.999999999999996, so be careful.
+      function totalCents(prices) {
+        // Turn each price into whole cents first, then add integers: integer addition is exact
+        return prices.reduce((sum, price) => sum + Math.round(price * 100), 0);
+      }
+
+      console.log(totalCents([1.15]), totalCents([0.29, 0.01]), totalCents([0.1, 0.2]));
+    </script>
+    <script type="text/plain" class="tests">
+      test('1.15 is 115 cents', () => assert.equal(totalCents([1.15]), 115));
+      test('0.29 + 0.01 is 30 cents', () => assert.equal(totalCents([0.29, 0.01]), 30));
+      test('0.1 + 0.2 is 30 cents', () => assert.equal(totalCents([0.1, 0.2]), 30));
+      test('ten dimes are a dollar', () => assert.equal(totalCents(Array(10).fill(0.1)), 100));
+      test('always a whole number', () => assert.ok(Number.isInteger(totalCents([19.99, 5.01, 0.07]))));
+      test('nothing costs nothing', () => assert.equal(totalCents([]), 0));
+    </script>
+  </div>
+</body>
+</html>

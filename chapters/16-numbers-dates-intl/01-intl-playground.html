@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>16-1 Intl Formatting Playground</title>
+  <style>
+    .controls { max-width: 980px; }
+    .num { width: 9em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; width: min(980px, 100%); }
+    .card { display: grid; gap: 6px; align-content: start; }
+    .card h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .out { margin: 0; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+    .call { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+    .note { margin: 0; font-size: 12px; color: var(--warn); }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Locale
+      <select id="locale" class="btn">
+        <option value="en-US">en-US</option>
+        <option value="zh-CN">zh-CN</option>
+        <option value="de-DE">de-DE</option>
+        <option value="fr-FR">fr-FR</option>
+        <option value="ja-JP">ja-JP</option>
+        <option value="hi-IN">hi-IN</option>
+        <option value="ar-EG">ar-EG</option>
+        <option value="sv-SE">sv-SE</option>
+      </select>
+    </label>
+    <label class="control">Number <input id="number" type="number" value="1234567.891" step="any" class="btn num"></label>
+    <label class="control">Currency
+      <select id="currency" class="btn"><option>USD</option><option>EUR</option><option>CNY</option><option>JPY</option></select>
+    </label>
+    <label class="control">Date <input id="date" type="datetime-local" class="btn"></label>
+    <label class="control">Time zone
+      <select id="zone" class="btn">
+        <option value="">This computer</option>
+        <option>UTC</option>
+        <option>Asia/Shanghai</option>
+        <option>Europe/Berlin</option>
+        <option>America/New_York</option>
+      </select>
+    </label>
+  </div>
+  <div class="grid" id="grid"></div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    // Default date: now, rounded to the minute, in the format datetime-local expects
+    const now = new Date();
+    now.setSeconds(0, 0);
+    $('date').value = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+    const WORDS = ['zebra', 'Äpfel', 'apple', 'Zoo', 'äpple', 'item 10', 'item 9'];
+
+    // Each card: a title, the code it runs (with the current settings filled in) and the output
+    function cards({ locale, n, currency, date, timeZone }) {
+      const zoneOption = timeZone ? `, timeZone: '${timeZone}'` : '';
+      const tz = timeZone ? { timeZone } : {};
+      const days = Math.round((date - Date.now()) / 86_400_000);
+      const list = [
+        ['Number', `new Intl.NumberFormat('${locale}').format(n)`, () => new Intl.NumberFormat(locale).format(n)],
+        ['Currency', `new Intl.NumberFormat('${locale}', { style: 'currency', currency: '${currency}' })`, () => new Intl.NumberFormat(locale, { style: 'currency', currency }).format(n)],
+        ['Compact', `{ notation: 'compact' }`, () => new Intl.NumberFormat(locale, { notation: 'compact' }).format(n)],
+        ['Percent', `{ style: 'percent', maximumFractionDigits: 1 }  // n / 1e7`, () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(n / 1e7)],
+        ['Unit', `{ style: 'unit', unit: 'kilometer-per-hour' }  // 88`, () => new Intl.NumberFormat(locale, { style: 'unit', unit: 'kilometer-per-hour' }).format(88)],
+        ['Date, full', `new Intl.DateTimeFormat('${locale}', { dateStyle: 'full'${zoneOption} })`, () => new Intl.DateTimeFormat(locale, { dateStyle: 'full', ...tz }).format(date)],
+        ['Date and time, short', `{ dateStyle: 'short', timeStyle: 'short'${zoneOption} }`, () => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short', ...tz }).format(date)],
+        ['Relative time', `new Intl.RelativeTimeFormat('${locale}', { numeric: 'auto' }).format(${days}, 'day')`, () => new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(days, 'day')],
+        ['Plural category', `new Intl.PluralRules('${locale}').select(${Math.trunc(n) % 100})`, () => new Intl.PluralRules(locale).select(Math.trunc(n) % 100)],
+        ['Ordinal category', `new Intl.PluralRules('${locale}', { type: 'ordinal' }).select(22)`, () => new Intl.PluralRules(locale, { type: 'ordinal' }).select(22)],
+        ['List', `new Intl.ListFormat('${locale}').format(['A', 'B', 'C'])`, () => new Intl.ListFormat(locale).format(['A', 'B', 'C'])],
+        ['Sort order', `words.toSorted(new Intl.Collator('${locale}', { numeric: true }).compare)`, () => WORDS.toSorted(new Intl.Collator(locale, { numeric: true }).compare).join(' · ')],
+        ['Region and currency names', `new Intl.DisplayNames('${locale}', { type: 'region' }).of('JP')`, () => `${new Intl.DisplayNames(locale, { type: 'region' }).of('JP')} · ${new Intl.DisplayNames(locale, { type: 'currency' }).of(currency)}`],
+        ['Duration', `new Intl.DurationFormat('${locale}', { style: 'long' }).format({ hours: 1, minutes: 46 })`,
+          () => ('DurationFormat' in Intl ? new Intl.DurationFormat(locale, { style: 'long' }).format({ hours: 1, minutes: 46 }) : null)],
+      ];
+      return list;
+    }
+
+    function render() {
+      const settings = {
+        locale: $('locale').value,
+        n: $('number').valueAsNumber || 0,
+        currency: $('currency').value,
+        date: new Date($('date').value || Date.now()),
+        timeZone: $('zone').value,
+      };
+      $('grid').replaceChildren(...cards(settings).map(([title, code, run]) => {
+        const card = document.createElement('section');
+        card.className = 'panel card';
+        let output;
+        let note = '';
+        try {
+          output = run();
+          if (output === null) { output = '—'; note = 'Intl.DurationFormat is not available in this browser.'; }
+        } catch (error) {
+          output = `${error.name}: ${error.message}`;
+        }
+        card.append(
+          Object.assign(document.createElement('h2'), { textContent: title }),
+          Object.assign(document.createElement('p'), { className: 'out', textContent: output, dir: 'auto', lang: settings.locale }),
+          Object.assign(document.createElement('code'), { className: 'call', textContent: code }),
+        );
+        if (note) card.append(Object.assign(document.createElement('p'), { className: 'note', textContent: note }));
+        return card;
+      }));
+    }
+    for (const id of ['locale', 'number', 'currency', 'date', 'zone']) $(id).addEventListener('input', render);
+    render();
+  </script>
+</body>
+</html>
