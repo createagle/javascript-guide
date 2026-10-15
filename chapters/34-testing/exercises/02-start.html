@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 34-2 · Start: Write a Spy</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 34-2">
+    <script type="text/plain" class="code">
+      // spy(impl) returns a fake function that records its calls, so tests can check how code used it.
+      // - it calls impl (when given) with the same arguments and `this`, and returns its result
+      // - spy.calls is the list of argument lists, e.g. [['a', 1], ['b', 2]]; spy.callCount is how many
+      // - spy.returns(value) makes later calls return value without calling impl, and returns the spy (for chaining)
+      // - spy.reset() forgets the recorded calls
+      function spy(impl) {
+        const fake = (...args) => {
+          fake.calls.push(args);
+          fake.callCount++;
+          return impl ? impl(...args) : undefined;
+        };
+        fake.calls = [];
+        fake.callCount = 0;
+        return fake;
+      }
+
+      // Code under test: it sends a reminder for every overdue task
+      function remindOverdue(tasks, send, today) {
+        for (const task of tasks) if (task.due < today) send(task.owner, `"${task.title}" is overdue`);
+      }
+
+      const send = spy();
+      remindOverdue([
+        { title: 'Taxes', owner: 'ada@example.com', due: '2025-04-15' },
+        { title: 'Dentist', owner: 'alan@example.com', due: '2025-12-01' },
+      ], send, '2025-06-01');
+      console.log(send.callCount, send.calls);
+    </script>
+    <script type="text/plain" class="tests">
+      test('records arguments and counts calls (impl is optional)', () => {
+        const s = spy();
+        s('a', 1);
+        s('b', 2);
+        assert.deepEqual(s.calls, [['a', 1], ['b', 2]]);
+        assert.equal(s.callCount, 2);
+      });
+      test('calls impl and returns its result', () => {
+        const double = spy((n) => n * 2);
+        assert.equal(double(21), 42);
+      });
+      test('keeps this', () => {
+        const counter = { n: 1, get: spy(function () { return this.n; }) };
+        assert.equal(counter.get(), 1);
+      });
+      test('returns(value) replaces the result and chains', () => {
+        const impl = spy();
+        const s = spy(impl).returns('canned');
+        assert.equal(s('x'), 'canned');
+        assert.equal(impl.callCount, 0, 'impl should not be called after returns()');
+      });
+      test('reset() forgets the calls', () => {
+        const s = spy();
+        s(1);
+        s.reset();
+        s(2);
+        assert.deepEqual(s.calls, [[2]]);
+        assert.equal(s.callCount, 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

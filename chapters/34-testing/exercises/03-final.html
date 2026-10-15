@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 34-3 · Final: A Fake Clock</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 34-3">
+    <script type="text/plain" class="code">
+      // createFakeClock() gives time-based code a clock that tests control, so they never have to wait:
+      //   { now(), setTimeout(fn, delay), clearTimeout(id), tick(ms) }
+      // - now() starts at 0; tick(ms) moves time forward by ms and runs each timer that becomes due,
+      //   in time order (same time: the order they were created), with now() equal to the timer's time
+      // - a timer created during tick() also runs in that tick if it becomes due before the tick ends
+      // - setTimeout returns an id; clearTimeout(id) cancels that timer; a timer runs at most once
+      function createFakeClock() {
+        let time = 0;
+        let nextId = 1;
+        const timers = new Map();             // id → { at, fn }; a Map keeps the creation order
+        return {
+          now: () => time,
+          setTimeout(fn, delay = 0) {
+            const id = nextId++;
+            timers.set(id, { at: time + Math.max(0, delay), fn });
+            return id;
+          },
+          clearTimeout(id) {
+            timers.delete(id);
+          },
+          tick(ms) {
+            const end = time + ms;
+            for (;;) {
+              // The earliest timer that is due by the end of this tick (ties: the one created first)
+              let next = null;
+              for (const entry of timers) {
+                if (entry[1].at <= end && (!next || entry[1].at < next[1].at)) next = entry;
+              }
+              if (!next) break;
+              const [id, timer] = next;
+              timers.delete(id);              // runs once
+              time = timer.at;
+              timer.fn();                     // may create or cancel timers
+            }
+            time = end;
+          },
+        };
+      }
+
+      // Testing debounce (chapter 30) instantly: it takes the clock as a parameter
+      function debounce(fn, wait, clock) {
+        let timer;
+        return (...args) => {
+          clock.clearTimeout(timer);
+          timer = clock.setTimeout(() => fn(...args), wait);
+        };
+      }
+      const clock = createFakeClock();
+      const saved = [];
+      const save = debounce((text) => saved.push(`${text} at ${clock.now()}`), 300, clock);
+      save('h');
+      clock.tick(100);
+      save('hello');
+      clock.tick(1000);                // a whole second, without waiting
+      console.log(saved);
+    </script>
+    <script type="text/plain" class="tests">
+      test('nothing runs before its time', () => {
+        const c = createFakeClock();
+        const log = [];
+        c.setTimeout(() => log.push('a'), 100);
+        c.tick(99);
+        assert.deepEqual(log, []);
+        c.tick(1);
+        assert.deepEqual(log, ['a']);
+        assert.equal(c.now(), 100);
+      });
+      test('timers run in time order; same time in creation order', () => {
+        const c = createFakeClock();
+        const log = [];
+        c.setTimeout(() => log.push('late'), 50);
+        c.setTimeout(() => log.push('early'), 10);
+        c.setTimeout(() => log.push('early 2'), 10);
+        c.tick(100);
+        assert.deepEqual(log, ['early', 'early 2', 'late']);
+      });
+      test('now() is the timer\'s own time while it runs, and each timer runs once', () => {
+        const c = createFakeClock();
+        const seen = [];
+        c.setTimeout(() => seen.push(c.now()), 30);
+        c.tick(100);
+        c.tick(100);
+        assert.deepEqual(seen, [30]);
+        assert.equal(c.now(), 200);
+      });
+      test('timers created during a tick run in that tick when due', () => {
+        const c = createFakeClock();
+        const log = [];
+        c.setTimeout(() => {
+          log.push(`first at ${c.now()}`);
+          c.setTimeout(() => log.push(`second at ${c.now()}`), 10);
+        }, 10);
+        c.tick(25);
+        assert.deepEqual(log, ['first at 10', 'second at 20']);
+      });
+      test('clearTimeout cancels', () => {
+        const c = createFakeClock();
+        const log = [];
+        const id = c.setTimeout(() => log.push('no'), 10);
+        c.setTimeout(() => log.push('yes'), 10);
+        c.clearTimeout(id);
+        c.tick(20);
+        assert.deepEqual(log, ['yes']);
+      });
+    </script>
+  </div>
+</body>
+</html>

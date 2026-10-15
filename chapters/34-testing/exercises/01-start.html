@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 34-1 · Start: Tests That Catch Bugs</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 34-1">
+    <script type="text/plain" class="code">
+      // Here is a correct isLeapYear. Write checkLeapYear(isLeapYear): a set of checks (with assert.*)
+      // that passes for this function but throws for buggy versions of it.
+      // The tests below run your checks against four buggy versions: your checks must catch every one.
+      // Rule: a year divisible by 4 is a leap year, except centuries, which are leap years only if divisible by 400.
+      function isLeapYear(year) {
+        return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+      }
+
+      function checkLeapYear(isLeapYear) {
+        assert.ok(isLeapYear(2024));
+      }
+
+      checkLeapYear(isLeapYear);
+      console.log('Your checks pass for the real isLeapYear.');
+    </script>
+    <script type="text/plain" class="tests">
+      const mutants = {
+        'only checks % 4': (y) => y % 4 === 0,
+        'forgets the 400 rule': (y) => y % 4 === 0 && y % 100 !== 0,
+        'has % 40 instead of % 400': (y) => (y % 4 === 0 && y % 100 !== 0) || y % 40 === 0,
+        'returns strings': (y) => String((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0),
+      };
+      test('your checks pass for the correct isLeapYear', () => {
+        checkLeapYear(isLeapYear);
+      });
+      for (const [bug, mutant] of Object.entries(mutants)) {
+        test(`your checks catch the version that ${bug}`, () => {
+          assert.throws(() => checkLeapYear(mutant), undefined, `the version that ${bug} passed your checks`);
+        });
+      }
+    </script>
+  </div>
+</body>
+</html>

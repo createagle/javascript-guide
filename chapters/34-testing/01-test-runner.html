@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>34-1 A Test Runner in the Browser</title>
+  <style>
+    .report { width: min(720px, 100%); display: grid; gap: 8px; }
+    .summary { margin: 0; font-weight: 600; }
+    .summary.good { color: var(--good); }
+    .summary.bad { color: var(--bad); }
+    .results { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+    .results li { display: grid; grid-template-columns: 1.4em 1fr auto; gap: 2px 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .mark { font-weight: 700; }
+    .pass .mark { color: var(--good); }
+    .fail .mark, .fail .name { color: var(--bad); }
+    .name { overflow-wrap: anywhere; }
+    .ms { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .results pre { grid-column: 2 / -1; margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--surface); font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <button class="btn btn-primary" type="button" id="run">Run tests</button>
+    <label class="control"><input type="checkbox" id="bugs"> Introduce bugs</label>
+    <label class="control"><input type="checkbox" id="failures"> Only failures</label>
+  </div>
+  <div class="panel report">
+    <p class="summary" id="summary" role="status"></p>
+    <ol class="results" id="results"></ol>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // ================= The code under test =================
+    let BUGS = false;
+    function formatPrice(cents) {
+      const value = (BUGS ? Math.floor(cents) : Math.round(cents)) / 100;   // whole cents, rounded
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+    }
+    class Cart {
+      #items = new Map();
+      add(id, price, qty = 1) {
+        if (!Number.isInteger(qty) || qty < 1) throw new RangeError(`Bad quantity: ${qty}`);
+        const item = this.#items.get(id) ?? { id, price, qty: 0 };
+        item.qty = BUGS ? qty : item.qty + qty;
+        this.#items.set(id, item);
+      }
+      get total() {
+        return [...this.#items.values()].reduce((sum, i) => sum + i.price * i.qty, 0);
+      }
+      get count() { return this.#items.size; }
+    }
+    function renderCart(cart, list) {
+      const n = cart.count;
+      list.replaceChildren(Object.assign(document.createElement('li'), { textContent: `${n} item${n === 1 ? '' : 's'}, ${formatPrice(cart.total)}` }));
+    }
+    async function loadCart(fetchJSON) {
+      const data = await fetchJSON('/api/cart');
+      const cart = new Cart();
+      for (const item of data.items) cart.add(item.id, item.price, item.qty);
+      return cart;
+    }
+
+    // ================= A tiny test runner =================
+    const tests = [];
+    const beforeEachHooks = [];
+    let suite = [];
+    function describe(name, body) {
+      suite.push(name);
+      body();                                     // registers the tests inside
+      suite.pop();
+    }
+    function test(name, fn) {
+      tests.push({ name: [...suite, name].join(' › '), fn });
+    }
+    function beforeEach(fn) {
+      beforeEachHooks.push(fn);
+    }
+
+    class AssertionError extends Error { name = 'AssertionError'; }
+    const show = (value) => JSON.stringify(value) ?? String(value);
+    function expect(actual) {
+      return {
+        toBe(expected) {
+          if (!Object.is(actual, expected)) throw new AssertionError(`Expected ${show(expected)}, received ${show(actual)}`);
+        },
+        toEqual(expected) {
+          if (show(actual) !== show(expected)) throw new AssertionError(`Expected ${show(expected)}, received ${show(actual)}`);
+        },
+        toThrow(type) {
+          try { actual(); } catch (error) {
+            if (type && !(error instanceof type)) throw new AssertionError(`Expected ${type.name}, but it threw ${error.name}`);
+            return;
+          }
+          throw new AssertionError('Expected the function to throw');
+        },
+      };
+    }
+
+    async function run() {
+      const results = [];
+      const started = performance.now();
+      for (const { name, fn } of tests) {
+        const start = performance.now();
+        try {
+          for (const hook of beforeEachHooks) await hook();
+          // A test that never finishes fails after 1 s instead of hanging the run
+          await Promise.race([fn(), new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out after 1000 ms')), 1000))]);
+          results.push({ name, ok: true, ms: performance.now() - start });
+        } catch (error) {
+          results.push({ name, ok: false, ms: performance.now() - start, error });
+        }
+      }
+      return { results, ms: performance.now() - started };
+    }
+
+    // ================= The tests =================
+    describe('formatPrice', () => {
+      test('formats cents as dollars', () => expect(formatPrice(1999)).toBe('$19.99'));
+      test('rounds half cents', () => expect(formatPrice(1999.5)).toBe('$20.00'));
+    });
+
+    describe('Cart', () => {
+      let cart;
+      beforeEach(() => { cart = new Cart(); });   // every test starts with an empty cart
+
+      test('starts empty', () => {
+        expect(cart.count).toBe(0);
+        expect(cart.total).toBe(0);
+      });
+      test('adds up prices × quantities', () => {
+        cart.add('pen', 150, 2);
+        cart.add('mug', 990);
+        expect(cart.total).toBe(1290);
+      });
+      test('adding the same item again increases its quantity', () => {
+        cart.add('pen', 150);
+        cart.add('pen', 150, 2);
+        expect(cart.count).toBe(1);
+        expect(cart.total).toBe(450);
+      });
+      test('rejects quantities that are not whole and positive', () => {
+        expect(() => cart.add('pen', 150, 0)).toThrow(RangeError);
+        expect(() => cart.add('pen', 150, 1.5)).toThrow(RangeError);
+      });
+    });
+
+    describe('renderCart (DOM)', () => {
+      test('shows the count and the total', () => {
+        const list = document.createElement('ul');   // a fresh element, not the real page
+        const cart = new Cart();
+        cart.add('pen', 150, 3);
+        renderCart(cart, list);
+        expect(list.textContent).toBe('1 item, $4.50');
+      });
+    });
+
+    describe('loadCart (with a test double)', () => {
+      test('builds a cart from the API data', async () => {
+        const calls = [];
+        const fakeFetchJSON = async (url) => {    // instead of the network
+          calls.push(url);
+          return { items: [{ id: 'pen', price: 150, qty: 2 }, { id: 'mug', price: 990, qty: 1 }] };
+        };
+        const cart = await loadCart(fakeFetchJSON);
+        expect(calls).toEqual(['/api/cart']);
+        expect(cart.total).toBe(1290);
+      });
+      test('passes errors on', async () => {
+        const failing = async () => { throw new Error('offline'); };
+        let caught = null;
+        try { await loadCart(failing); } catch (error) { caught = error; }
+        expect(caught?.message).toBe('offline');
+      });
+    });
+
+    // ================= The report =================
+    async function report() {
+      BUGS = $('bugs').checked;
+      $('run').disabled = true;
+      $('summary').textContent = 'Running…';
+      const { results, ms } = await run();
+      const failed = results.filter((r) => !r.ok);
+      $('summary').textContent = `${results.length - failed.length} passed, ${failed.length} failed, in ${ms.toFixed(1)} ms`;
+      $('summary').className = `summary ${failed.length ? 'bad' : 'good'}`;
+      $('results').replaceChildren(...results.filter((r) => !$('failures').checked || !r.ok).map((r) => {
+        const li = document.createElement('li');
+        li.className = r.ok ? 'pass' : 'fail';
+        li.append(Object.assign(document.createElement('span'), { className: 'mark', textContent: r.ok ? '✓' : '✗' }),
+          Object.assign(document.createElement('span'), { className: 'name', textContent: r.name }),
+          Object.assign(document.createElement('span'), { className: 'ms', textContent: `${r.ms.toFixed(1)} ms` }));
+        if (!r.ok) li.append(Object.assign(document.createElement('pre'), { textContent: `${r.error.name}: ${r.error.message}` }));
+        return li;
+      }));
+      $('run').disabled = false;
+    }
+    $('run').addEventListener('click', report);
+    $('bugs').addEventListener('change', report);
+    $('failures').addEventListener('change', report);
+    report();
+  </script>
+</body>
+</html>

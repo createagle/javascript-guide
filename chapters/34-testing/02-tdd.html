@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>34-2 Test-Driven Development</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="TDD: parseDuration">
+    <script type="text/plain" class="code" data-name="1 · Red: a first test">
+      // Write the test first. It fails: parseDuration does not exist yet.
+      test('parses minutes', () => {
+        assert.equal(parseDuration('5m'), 5 * 60_000);
+      });
+
+      function parseDuration(text) {
+        // not written yet
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="2 · Green: just enough code">
+      test('parses minutes', () => {
+        assert.equal(parseDuration('5m'), 5 * 60_000);
+      });
+
+      // The simplest code that passes. It is not the final version, and that is fine.
+      function parseDuration(text) {
+        return parseInt(text, 10) * 60_000;
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="3 · Red: more cases">
+      test('parses minutes', () => {
+        assert.equal(parseDuration('5m'), 5 * 60_000);
+      });
+      test('parses hours and seconds', () => {
+        assert.equal(parseDuration('2h'), 2 * 3_600_000);
+        assert.equal(parseDuration('45s'), 45_000);
+      });
+      test('adds up several parts', () => {
+        assert.equal(parseDuration('1h 30m'), 90 * 60_000);
+      });
+
+      function parseDuration(text) {
+        return parseInt(text, 10) * 60_000;
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="4 · Green: the general rule">
+      test('parses minutes', () => {
+        assert.equal(parseDuration('5m'), 5 * 60_000);
+      });
+      test('parses hours and seconds', () => {
+        assert.equal(parseDuration('2h'), 2 * 3_600_000);
+        assert.equal(parseDuration('45s'), 45_000);
+      });
+      test('adds up several parts', () => {
+        assert.equal(parseDuration('1h 30m'), 90 * 60_000);
+      });
+
+      const UNITS = { h: 3_600_000, m: 60_000, s: 1000 };
+      function parseDuration(text) {
+        let total = 0;
+        for (const [, amount, unit] of text.matchAll(/(\d+)\s*([hms])/g)) total += amount * UNITS[unit];
+        return total;
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="5 · Red: bad input">
+      test('parses minutes', () => {
+        assert.equal(parseDuration('5m'), 5 * 60_000);
+      });
+      test('parses hours and seconds', () => {
+        assert.equal(parseDuration('2h'), 2 * 3_600_000);
+        assert.equal(parseDuration('45s'), 45_000);
+      });
+      test('adds up several parts', () => {
+        assert.equal(parseDuration('1h 30m'), 90 * 60_000);
+      });
+      test('rejects text it does not understand', () => {
+        assert.throws(() => parseDuration(''), SyntaxError);
+        assert.throws(() => parseDuration('5 minutes'), SyntaxError);
+        assert.throws(() => parseDuration('1h 30x'), SyntaxError);
+      });
+
+      const UNITS = { h: 3_600_000, m: 60_000, s: 1000 };
+      function parseDuration(text) {
+        let total = 0;
+        for (const [, amount, unit] of text.matchAll(/(\d+)\s*([hms])/g)) total += amount * UNITS[unit];
+        return total;
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="6 · Green, then refactor">
+      test('parses minutes', () => {
+        assert.equal(parseDuration('5m'), 5 * 60_000);
+      });
+      test('parses hours and seconds', () => {
+        assert.equal(parseDuration('2h'), 2 * 3_600_000);
+        assert.equal(parseDuration('45s'), 45_000);
+      });
+      test('adds up several parts', () => {
+        assert.equal(parseDuration('1h 30m'), 90 * 60_000);
+      });
+      test('rejects text it does not understand', () => {
+        assert.throws(() => parseDuration(''), SyntaxError);
+        assert.throws(() => parseDuration('5 minutes'), SyntaxError);
+        assert.throws(() => parseDuration('1h 30x'), SyntaxError);
+      });
+
+      // The whole text must be "<number><unit>" parts separated by spaces; the tests make this rewrite safe
+      const UNITS = { h: 3_600_000, m: 60_000, s: 1000 };
+      const PART = /^(\d+)([hms])$/;
+
+      function parseDuration(text) {
+        const parts = text.trim().split(/\s+/);
+        return parts.reduce((total, part) => {
+          const match = PART.exec(part);
+          if (!match) throw new SyntaxError(`Cannot read "${part}" in "${text}"`);
+          return total + Number(match[1]) * UNITS[match[2]];
+        }, 0);
+      }
+
+      console.log(parseDuration('1h 30m 15s'), 'ms');
+    </script>
+  </div>
+</body>
+</html>
