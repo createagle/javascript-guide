@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 31-3 · Start: Animate and Keep the End State</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 31-3" data-mode="dom" data-height="160">
+    <template class="html">
+      <div class="stage">
+        <div id="box" class="box">Box</div>
+      </div>
+      <p><button type="button" id="right">Move right</button> <button type="button" id="back">Move back</button> <output id="status"></output></p>
+      <style>
+        .stage { position: relative; height: 70px; }
+        .box { width: 60px; height: 60px; display: grid; place-items: center; border-radius: 8px; background: #2563eb; color: #fff; font: 600 14px system-ui, sans-serif; }
+      </style>
+    </template>
+    <script type="text/plain" class="code">
+      // animateTo(element, keyframe, options) animates element from its current style to `keyframe`
+      // and returns a promise that resolves once the animation has finished. Afterwards:
+      // - the end state is written into element.style, so it stays when the animation is gone
+      // - no animation is left on the element (element.getAnimations() is empty),
+      //   so later style changes take effect normally
+      function animateTo(element, keyframe, options) {
+        // fill: 'forwards' keeps the end state visible, but only while the animation exists
+        element.animate([keyframe], { ...options, fill: 'forwards' });
+      }
+
+      const box = document.querySelector('#box');
+      const status = document.querySelector('#status');
+      document.querySelector('#right').addEventListener('click', async () => {
+        await animateTo(box, { transform: 'translateX(160px)' }, { duration: 400, easing: 'ease-out' });
+        status.value = `style.transform is now "${box.style.transform}"`;
+      });
+      document.querySelector('#back').addEventListener('click', async () => {
+        await animateTo(box, { transform: 'translateX(0px)' }, { duration: 400, easing: 'ease-out' });
+        status.value = `style.transform is now "${box.style.transform}"`;
+      });
+    </script>
+    <script type="text/plain" class="tests">
+      test('returns a promise that resolves when the animation ends', async () => {
+        const started = performance.now();
+        const result = animateTo(box, { transform: 'translateX(100px)' }, { duration: 120 });
+        assert.ok(result instanceof Promise, 'animateTo should return a promise');
+        await result;
+        assert.ok(performance.now() - started >= 100, 'resolved too early');
+      });
+      test('the end state is in element.style', () => {
+        assert.equal(box.style.transform, 'translateX(100px)');
+      });
+      test('no animation is left behind', () => {
+        assert.equal(box.getAnimations().length, 0);
+      });
+      test('later style changes still work', async () => {
+        box.style.transform = 'none';
+        assert.equal(getComputedStyle(box).transform, 'none');
+      });
+    </script>
+  </div>
+</body>
+</html>

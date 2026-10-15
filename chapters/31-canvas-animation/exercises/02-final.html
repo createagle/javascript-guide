@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 31-2 · Final: A Sharp Canvas on Every Screen</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 31-2" data-mode="dom" data-height="200">
+    <template class="html">
+      <canvas id="canvas" style="width: 300px; height: 150px; outline: 1px solid #a8a29e"></canvas>
+    </template>
+    <script type="text/plain" class="code">
+      // On a high-density screen (devicePixelRatio 2 or 3) a canvas with the default bitmap looks blurry.
+      // fitCanvas(canvas) makes the bitmap devicePixelRatio times its CSS size, keeps the CSS size,
+      // and sets up the context so drawing code can keep using CSS pixels. It returns the 2D context.
+      function fitCanvas(canvas) {
+        const ratio = window.devicePixelRatio || 1;
+        const { width, height } = canvas.getBoundingClientRect();
+        canvas.width = Math.round(width * ratio);      // the bitmap: real device pixels
+        canvas.height = Math.round(height * ratio);
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);    // 1 unit = 1 CSS pixel (set, not scale: safe to call again)
+        return ctx;
+      }
+
+      const ctx = fitCanvas(document.querySelector('#canvas'));
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.arc(75, 75, 50, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#78716c';
+      ctx.font = '16px system-ui, sans-serif';
+      ctx.fillText('Sharp text?', 140, 80);
+    </script>
+    <script type="text/plain" class="tests">
+      const canvas = document.querySelector('#canvas');
+      // Pretend to be a 2× screen (devicePixelRatio can be overwritten), and restore it afterwards
+      const withRatio = (ratio, fn) => {
+        window.devicePixelRatio = ratio;
+        try { return fn(); } finally { delete window.devicePixelRatio; }
+      };
+
+      test('the bitmap is the CSS size × devicePixelRatio', () => {
+        withRatio(2, () => fitCanvas(canvas));
+        assert.equal(canvas.width, 600);
+        assert.equal(canvas.height, 300);
+      });
+      test('the CSS size stays the same', () => {
+        const { width, height } = canvas.getBoundingClientRect();
+        assert.equal(width, 300);
+        assert.equal(height, 150);
+      });
+      test('drawing code uses CSS pixels', () => {
+        const context = withRatio(2, () => fitCanvas(canvas));
+        context.clearRect(0, 0, 300, 150);
+        context.fillStyle = '#000';
+        context.fillRect(0, 0, 10, 10);           // 10 CSS pixels = 20 device pixels
+        assert.equal(context.getImageData(19, 19, 1, 1).data[3], 255, 'device pixel (19, 19) should be painted');
+        assert.equal(context.getImageData(21, 21, 1, 1).data[3], 0, 'device pixel (21, 21) should be empty');
+      });
+      test('calling it twice does not double the scale', () => {
+        const context = withRatio(2, () => { fitCanvas(canvas); return fitCanvas(canvas); });
+        assert.equal(context.getTransform().a, 2);
+      });
+    </script>
+  </div>
+</body>
+</html>

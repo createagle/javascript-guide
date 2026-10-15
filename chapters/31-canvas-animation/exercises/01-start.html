@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 31-1 · Start: Frame-Rate Independent Particles</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 31-1">
+    <script type="text/plain" class="code">
+      // stepParticles(particles, dt, world) moves every particle forward by dt SECONDS and returns the live ones.
+      // world = { gravity, floor }: gravity in px/s², floor is the y of the ground (y grows downwards).
+      // - first the velocity changes by gravity × dt, then the position by velocity × dt
+      // - a particle below the floor is put back on it and bounces up with half its speed
+      // - life (in seconds) goes down by dt; particles with life <= 0 are removed
+      function stepParticles(particles, dt, world) {
+        // Written for "one frame": assumes every call is 1/60 s, whatever dt says
+        for (const p of particles) {
+          p.vy += world.gravity / 60;
+          p.x += p.vx / 60;
+          p.y += p.vy / 60;
+          if (p.y > world.floor) {
+            p.y = world.floor;
+            p.vy = -p.vy * 0.5;
+          }
+          p.life -= 1 / 60;
+        }
+        return particles;
+      }
+
+      // One second of a ball thrown up, at 60 updates per second
+      let balls = [{ x: 0, y: 0, vx: 50, vy: -300, life: 10 }];
+      for (let i = 0; i < 60; i++) balls = stepParticles(balls, 1 / 60, { gravity: 600, floor: 100 });
+      console.log(balls[0]);
+    </script>
+    <script type="text/plain" class="tests">
+      const make = (props) => ({ x: 0, y: 0, vx: 0, vy: 0, life: 10, ...props });
+      const near = (actual, expected, tolerance, label) =>
+        assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: expected about ${+expected.toFixed(2)}, got ${+actual.toFixed(2)}`);
+
+      test('moves by velocity × dt', () => {
+        const [p] = stepParticles([make({ vx: 100 })], 0.5, { gravity: 0, floor: 1000 });
+        near(p.x, 50, 0.001, 'x');
+      });
+      test('gravity adds speed over time', () => {
+        const [p] = stepParticles([make()], 0.25, { gravity: 400, floor: 1000 });
+        near(p.vy, 100, 0.001, 'vy');
+      });
+      test('one second at 60 or at 30 updates ends in about the same place', () => {
+        const world = { gravity: 600, floor: 1000 };
+        let fast = [make({ vx: 50, vy: -300 })], slow = [make({ vx: 50, vy: -300 })];
+        for (let i = 0; i < 60; i++) fast = stepParticles(fast, 1 / 60, world);
+        for (let i = 0; i < 30; i++) slow = stepParticles(slow, 1 / 30, world);
+        near(slow[0].x, fast[0].x, 0.001, 'x');
+        near(slow[0].y, fast[0].y, 10, 'y');
+      });
+      test('bounces off the floor with half the speed', () => {
+        const [p] = stepParticles([make({ y: 95, vy: 200 })], 0.1, { gravity: 0, floor: 100 });
+        near(p.y, 100, 0.001, 'y');
+        near(p.vy, -100, 0.001, 'vy');
+      });
+      test('old particles are removed', () => {
+        const live = stepParticles([make({ life: 0.05 }), make({ life: 1 })], 0.1, { gravity: 0, floor: 1000 });
+        assert.equal(live.length, 1);
+        near(live[0].life, 0.9, 0.001, 'life');
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>31-2 Web Animations and View Transitions</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .layout .panel { display: grid; gap: 12px; }
+    .track { position: relative; height: 56px; border-radius: 8px; background: var(--surface); }
+    .ball { position: absolute; top: 8px; left: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--accent); }
+    .buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    #buttons .btn { font-family: var(--mono); font-size: 13px; }
+    .readout { margin: 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 2.6em; }
+    .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .cards li { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; font-weight: 600; color: #fff; background: hsl(calc(var(--hue) * 1deg) 60% 45%); }
+    .cards.list { grid-template-columns: 1fr; }
+    .cards.list li { aspect-ratio: auto; padding: 8px; place-items: center start; }
+    @media (prefers-reduced-motion: reduce) {
+      ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+    }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <section class="panel" aria-labelledby="waapi-title">
+      <p class="label" id="waapi-title">element.animate()</p>
+      <div class="track"><div class="ball" id="ball"></div></div>
+      <div class="buttons" id="buttons">
+        <button class="btn" type="button" data-action="play">play()</button>
+        <button class="btn" type="button" data-action="pause">pause()</button>
+        <button class="btn" type="button" data-action="reverse">reverse()</button>
+        <button class="btn" type="button" data-action="finish">finish()</button>
+        <button class="btn" type="button" data-action="cancel">cancel()</button>
+      </div>
+      <label class="control">Speed <input type="range" id="rate" min="-2" max="3" step="0.25" value="1"> <output id="rate-out" for="rate">1×</output></label>
+      <label class="control">Time <input type="range" id="scrub" min="0" max="4000" step="10" value="0"></label>
+      <label class="control">Easing
+        <select class="btn" id="easing">
+          <option>ease-in-out</option>
+          <option>linear</option>
+          <option value="cubic-bezier(0.5, -0.6, 0.5, 1.6)">overshoot</option>
+          <option value="steps(6)">steps(6)</option>
+        </select></label>
+      <p class="readout" id="state"></p>
+    </section>
+    <section class="panel" aria-labelledby="vt-title">
+      <p class="label" id="vt-title">document.startViewTransition()</p>
+      <div class="buttons">
+        <button class="btn" type="button" id="shuffle">Shuffle</button>
+        <button class="btn" type="button" id="layout" aria-pressed="false">List layout</button>
+        <label class="control"><input type="checkbox" id="use-vt" checked> Use a view transition</label>
+      </div>
+      <ul class="cards" id="cards"></ul>
+      <p class="readout" id="vt-note"></p>
+    </section>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // ---- Web Animations API: keyframes + timing, and an Animation object to control ----
+    const animation = $('ball').animate([
+      { left: '0%', transform: 'rotate(0turn)', borderRadius: '50%' },
+      { left: 'calc(100% - 40px)', transform: 'rotate(1turn)', borderRadius: '8px' },
+    ], { duration: 2000, iterations: 2, direction: 'alternate', easing: 'ease-in-out', fill: 'both' });
+
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) animation.pause();   // wait for the user
+
+    let watching = 0;
+    function show() {
+      const time = animation.currentTime ?? 0;
+      $('state').textContent = `playState: ${animation.playState} · currentTime: ${Math.round(time)} ms · playbackRate: ${animation.playbackRate}`;
+      if (document.activeElement !== $('scrub')) $('scrub').value = time;
+      // Keep the readout moving only while the animation runs
+      watching = animation.playState === 'running' ? requestAnimationFrame(show) : 0;
+    }
+
+    $('buttons').addEventListener('click', (event) => {
+      const action = event.target.closest('button')?.dataset.action;
+      if (!action) return;
+      try {
+        animation[action]();
+      } catch (error) {
+        $('state').textContent = `${error.name}: ${error.message}`;   // e.g. finish() at speed 0
+        return;
+      }
+      cancelAnimationFrame(watching);
+      show();
+    });
+    $('rate').addEventListener('input', () => {
+      const rate = Number($('rate').value);
+      $('rate-out').value = `${rate}×`;
+      animation.updatePlaybackRate(rate);          // changes speed without a jump
+      cancelAnimationFrame(watching);
+      show();
+    });
+    $('scrub').addEventListener('input', () => {
+      animation.pause();
+      animation.currentTime = Number($('scrub').value);
+      show();
+    });
+    $('easing').addEventListener('change', () => animation.effect.updateTiming({ easing: $('easing').value }));
+    animation.addEventListener('finish', show);
+    animation.addEventListener('cancel', show);
+    show();
+
+    // ---- View transitions: change the DOM, and the browser animates from the old picture to the new ----
+    const cards = $('cards');
+    for (const [i, name] of ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'].entries()) {
+      const li = Object.assign(document.createElement('li'), { textContent: name });
+      li.style.viewTransitionName = `card-${i}`;   // each card is animated on its own
+      li.style.setProperty('--hue', i * 60);
+      cards.append(li);
+    }
+
+    function change(update) {
+      if (!document.startViewTransition || !$('use-vt').checked) {
+        update();                                  // no support (or switched off): just change the DOM
+        return;
+      }
+      document.startViewTransition(update);
+    }
+    $('shuffle').addEventListener('click', () => change(() => {
+      const items = [...cards.children];
+      for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+      cards.append(...items);
+    }));
+    $('layout').addEventListener('click', () => change(() => {
+      const list = cards.classList.toggle('list');
+      $('layout').setAttribute('aria-pressed', String(list));
+    }));
+    $('vt-note').textContent = document.startViewTransition
+      ? 'Shuffle the cards, then switch the checkbox off and compare.'
+      : 'This browser has no view transitions: the cards change at once, and nothing breaks.';
+  </script>
+</body>
+</html>

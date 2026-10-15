@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>31-1 Canvas Particles</title>
+  <style>
+    canvas { display: block; width: min(760px, 100%); height: 320px; border-radius: 10px; border: 1px solid var(--border); touch-action: manipulation; cursor: crosshair; }
+    .readout { margin: 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Updates
+      <select class="btn" id="fps">
+        <option value="0">every frame</option>
+        <option value="60">60 per second</option>
+        <option value="30">30 per second</option>
+        <option value="15">15 per second</option>
+      </select></label>
+    <label class="control"><input type="checkbox" id="delta" checked> Scale by time delta</label>
+    <label class="control">Gravity <input type="range" id="gravity" min="0" max="1500" step="50" value="600"></label>
+    <button class="btn" type="button" id="burst">Burst</button>
+    <button class="btn btn-primary" type="button" id="play">Pause</button>
+  </div>
+  <canvas id="canvas" role="img" aria-label="A fountain of particles. Click or tap to add a burst."></canvas>
+  <p class="readout" id="readout" aria-live="off"></p>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const canvas = $('canvas');
+    const ctx = canvas.getContext('2d');
+    let width = 0, height = 0, background = '';
+
+    // A sharp canvas: the bitmap has devicePixelRatio pixels per CSS pixel, and we draw in CSS pixels
+    function fit() {
+      const ratio = window.devicePixelRatio || 1;
+      ({ width, height } = canvas.getBoundingClientRect());
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      background = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+      render();
+    }
+    new ResizeObserver(fit).observe(canvas);
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', fit);
+
+    // ---- The simulation: speeds in px per second, so it does not depend on the frame rate ----
+    let particles = [], fountain = 0;
+    function emit(x, y, count, spread) {
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * spread;
+        const speed = 250 + Math.random() * 350;
+        particles.push({
+          x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+          life: 1.5 + Math.random(), size: 2 + Math.random() * 3, hue: (performance.now() / 30 + Math.random() * 40) % 360,
+        });
+      }
+    }
+
+    function update(dt) {
+      const gravity = Number($('gravity').value);
+      fountain += dt * 120;                         // 120 new particles per second
+      emit(width / 2, height - 6, Math.floor(fountain), 0.6);
+      fountain %= 1;
+      for (const p of particles) {
+        p.vy += gravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.y > height - p.size) {                // bounce off the floor, losing half the speed
+          p.y = height - p.size;
+          p.vy = -p.vy * 0.5;
+        }
+        p.life -= dt;
+      }
+      particles = particles.filter((p) => p.life > 0 && p.x > -10 && p.x < width + 10);
+    }
+
+    function render() {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, width, height);
+      for (const p of particles) {
+        ctx.globalAlpha = Math.min(1, p.life);
+        ctx.fillStyle = `hsl(${p.hue} 80% 60%)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- The loop ----
+    let running = false, frameId = 0, last = null, updates = [];
+    function frame(now) {
+      frameId = requestAnimationFrame(frame);
+      const rate = Number($('fps').value);
+      if (rate && last !== null && now - last < 1000 / rate - 1) return;   // skip frames to imitate a slower device
+      const dt = last === null ? 0 : Math.min((now - last) / 1000, 0.1);   // seconds; capped after a long pause
+      last = now;
+      update($('delta').checked ? dt : 1 / 60);    // without the delta, every update pretends 1/60 s passed
+      render();
+      updates.push(now);
+      while (updates[0] < now - 1000) updates.shift();
+      $('readout').textContent = `${particles.length} particles · ${updates.length} updates per second`;
+    }
+
+    function setRunning(on) {
+      running = on;
+      $('play').textContent = on ? 'Pause' : 'Play';
+      if (on) {
+        last = null;                                // the first frame after a pause moves nothing
+        frameId = requestAnimationFrame(frame);
+      } else {
+        cancelAnimationFrame(frameId);
+        $('readout').textContent = `${particles.length} particles · paused`;
+      }
+    }
+    $('play').addEventListener('click', () => setRunning(!running));
+
+    function burst(x, y) {
+      emit(x, y, 80, Math.PI * 2);
+      if (!running) render();
+    }
+    canvas.addEventListener('pointerdown', (event) => burst(event.offsetX, event.offsetY));
+    $('burst').addEventListener('click', () => burst(width * (0.2 + Math.random() * 0.6), height * (0.2 + Math.random() * 0.4)));
+
+    // Respect reduced motion: show a still picture and let the user start it
+    fit();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (let i = 0; i < 60; i++) update(1 / 60);
+      render();
+      setRunning(false);
+    } else {
+      setRunning(true);
+    }
+  </script>
+</body>
+</html>
