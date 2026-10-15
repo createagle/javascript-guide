@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 21-1 · Start: Split a Script into Modules</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 21-1">
+    <script type="text/plain" class="code" data-file="main.js">
+      // Everything is in main.js. Move the cart into cart.js (named exports addItem and total)
+      // and formatPrice into format.js (as its default export), then import them here.
+      const items = [];
+      function addItem(name, price, quantity = 1) {
+        items.push({ name, price, quantity });
+      }
+      function total() {
+        return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      }
+      function formatPrice(amount) {
+        return `$${amount.toFixed(2)}`;
+      }
+
+      addItem('Pen', 1.5, 2);
+      addItem('Notebook', 4);
+      console.log(`Total: ${formatPrice(total())}`);
+    </script>
+    <script type="text/plain" class="code" data-file="cart.js">
+      // addItem and total go here
+    </script>
+    <script type="text/plain" class="code" data-file="format.js">
+      // formatPrice goes here
+    </script>
+    <script type="text/plain" class="tests">
+      test('main.js prints the total', () => assert.ok(consoleOutput.some((l) => l.text === 'Total: $7.00')));
+      test('cart.js has named exports addItem and total', async () => {
+        const cart = await import('./cart.js');
+        assert.equal(typeof cart.addItem, 'function');
+        assert.equal(typeof cart.total, 'function');
+        assert.equal(cart.default, undefined, 'no default export');
+      });
+      test('format.js has a default export', async () => {
+        const { default: format } = await import('./format.js');
+        assert.equal(format(3.5), '$3.50');
+      });
+      test('the items stay private to cart.js', async () => {
+        const cart = await import('./cart.js');
+        assert.equal(cart.items, undefined);
+      });
+    </script>
+  </div>
+</body>
+</html>

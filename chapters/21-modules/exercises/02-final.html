@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 21-2 · Final: Share State Through a Module</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 21-2">
+    <script type="text/plain" class="code" data-file="main.js">
+      // main.js changes the theme, but the panel still says "light":
+      // each file creates its own settings. Make settings.js hold one shared set of settings,
+      // exported as get(key), set(key, value) and a `changes` count that goes up on every set.
+      import * as settings from './settings.js';
+      import { describe } from './panel.js';
+
+      settings.set('theme', 'dark');
+      console.log(describe());            // should be "Theme: dark"
+      console.log(settings.changes);      // 1
+    </script>
+    <script type="text/plain" class="code" data-file="settings.js">
+      // A module runs once, so this Map is shared by every file that imports it
+      const values = new Map([['theme', 'light']]);
+      export let changes = 0;             // importers always see the current value
+
+      export const get = (key) => values.get(key);
+      export function set(key, value) {
+        values.set(key, value);
+        changes++;
+      }
+    </script>
+    <script type="text/plain" class="code" data-file="panel.js">
+      import { get } from './settings.js';
+
+      export function describe() {
+        return `Theme: ${get('theme')}`;
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      test('the panel sees the change', () => assert.equal(describe(), 'Theme: dark'));
+      test('settings.js exports get and set', async () => {
+        const s = await import('./settings.js');
+        assert.equal(typeof s.get, 'function');
+        assert.equal(typeof s.set, 'function');
+        assert.equal(s.get('theme'), 'dark');
+      });
+      test('changes is a live count', async () => {
+        const s = await import('./settings.js');
+        assert.equal(s.changes, 1);
+        s.set('lang', 'en');
+        assert.equal(s.changes, 2);
+      });
+    </script>
+  </div>
+</body>
+</html>

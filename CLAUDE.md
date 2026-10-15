@@ -26,7 +26,7 @@
   - **运行器页**（讲语言的章节）：页面里放一个或几个 `<div class="playground">`，由 `assets/playground.js`
     变成可编辑、可运行的代码框。代码默认在 Web Worker 里运行（没有 DOM，3 秒无响应视为死循环并终止）；
     `data-mode="dom"` 时在沙箱 iframe 里以模块脚本运行，配 `<template class="html">` 提供页面结构。
-    写法见 `assets/playground.js` 开头的注释。
+    写法见 `assets/playground.js` 开头的注释。多个 `data-file` 代码块组成一组 ES 模块文件（第一个是入口，文件之间用 `./name.js` 互相导入），用于模块相关的题目。
   - **界面页**（讲浏览器 API 的章节）：`<body class="demo">` 内放可选的 `<div class="controls">` 和 `<div class="stage">`，
     脚本直接写在页面里。
 - 每个页面的 `<head>` 都先引用 `../../assets/demo.js`（练习页是 `../../../assets/demo.js`），再引用 `style.css`；

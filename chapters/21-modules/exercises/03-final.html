@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 21-3 · Final: Load a Language on Demand</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 21-3">
+    <script type="text/plain" class="code" data-file="main.js">
+      // loadLocale(lang) resolves to the messages of one language.
+      // Right now every language is downloaded up front. Load only the one asked for,
+      // with import(), and fall back to English for a language we don't have.
+      const SUPPORTED = ['en', 'zh', 'fr'];
+
+      async function loadLocale(lang) {
+        // Check against a fixed list: never build an import path from raw input
+        const code = SUPPORTED.includes(lang) ? lang : 'en';
+        const module = await import(`./${code}.js`);
+        return module.default;
+      }
+
+      const messages = await loadLocale('fr');
+      console.log(messages.greeting);
+    </script>
+    <script type="text/plain" class="code" data-file="en.js">
+      (globalThis.loaded ??= []).push('en');   // lets the tests see which files were loaded
+      export default { greeting: 'Hello', farewell: 'Goodbye' };
+    </script>
+    <script type="text/plain" class="code" data-file="zh.js">
+      (globalThis.loaded ??= []).push('zh');
+      export default { greeting: '你好', farewell: '再见' };
+    </script>
+    <script type="text/plain" class="code" data-file="fr.js">
+      (globalThis.loaded ??= []).push('fr');
+      export default { greeting: 'Bonjour', farewell: 'Au revoir' };
+    </script>
+    <script type="text/plain" class="tests">
+      test('only the language asked for was loaded', () => assert.deepEqual(globalThis.loaded, ['fr']));
+      test('loads another language', async () => assert.equal((await loadLocale('zh')).greeting, '你好'));
+      test('falls back to English', async () => assert.equal((await loadLocale('xx')).greeting, 'Hello'));
+      test('a module loads only once', async () => {
+        const a = await loadLocale('fr');
+        const b = await loadLocale('fr');
+        assert.equal(a, b);
+        assert.equal(globalThis.loaded.filter((l) => l === 'fr').length, 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

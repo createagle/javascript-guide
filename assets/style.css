@@ -165,6 +165,11 @@ pre.code {
 }
 .pg-title { font-size: 13px; font-weight: 600; }
 .pg-badge { font-size: 11px; color: var(--muted); margin-left: 8px; }
+.pg-files { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.pg-file { font: 12px var(--mono); padding: 3px 10px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+.pg-file:hover { color: var(--fg); }
+.pg-file[aria-pressed="true"] { background: var(--bg); border-color: var(--border); color: var(--fg); }
+.pg-file:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pg-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-items: center; margin-left: auto; }
 .pg-actions select { max-width: 11em; }
 @container (width < 420px) { .pg-status { display: none; } }

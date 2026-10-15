@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>21-2 Switching Implementations with an Import Map</title>
+  <style>
+    .choose, .choose + .panel { width: min(760px, 100%); }
+    .choose { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+    .choose legend { font-size: 13px; color: var(--muted); padding: 0 4px; }
+    .choose label { display: flex; align-items: center; gap: 6px; font: 13px var(--mono); }
+    pre.code { font-size: 12px; margin: 4px 0 14px; }
+    .note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .amounts { border-collapse: collapse; width: 100%; font-size: 13px; }
+    .amounts th, .amounts td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    .amounts th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .amounts td:last-child { font-family: var(--mono); font-weight: 600; }
+    @media (width < 480px) { .amounts th:nth-child(3), .amounts td:nth-child(3) { display: none; } }
+  </style>
+  <script>
+    // Write the import map before any module script runs; ?impl=simple picks the other file
+    (() => {
+      'use strict';
+      const impl = new URLSearchParams(location.search).get('impl') === 'simple' ? 'simple' : 'intl';
+      if (!HTMLScriptElement.supports?.('importmap')) {
+        document.addEventListener('DOMContentLoaded', () => {
+          document.body.textContent = 'This browser does not support import maps.';
+        });
+        return;
+      }
+      const map = document.createElement('script');
+      map.type = 'importmap';
+      map.textContent = JSON.stringify({ imports: { money: `./lib/money-${impl}.js` } }, null, 2);
+      document.currentScript.after(map);
+    })();
+  </script>
+</head>
+<body class="demo">
+  <fieldset class="panel choose">
+    <legend>The bare specifier 'money' maps to</legend>
+    <label><input type="radio" name="impl" value="intl"> ./lib/money-intl.js</label>
+    <label><input type="radio" name="impl" value="simple"> ./lib/money-simple.js</label>
+  </fieldset>
+  <div class="panel">
+    <p class="label">The import map in this page</p>
+    <pre class="code" id="map"></pre>
+    <p class="label">The page's module</p>
+    <pre class="code">import { formatMoney, name } from 'money';</pre>
+    <p class="note" id="resolved"></p>
+    <table class="amounts">
+      <thead><tr><th scope="col">Amount</th><th scope="col">Currency</th><th scope="col">Locale</th><th scope="col">formatMoney()</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <script type="module">
+    import { formatMoney, name } from 'money';
+
+    const $ = (id) => document.getElementById(id);
+    const AMOUNTS = [
+      [1234.5, 'USD', 'en-US'],
+      [1234.5, 'EUR', 'de-DE'],
+      [1500000, 'JPY', 'ja-JP'],
+      [-42, 'CNY', 'zh-CN'],
+    ];
+    $('map').textContent = document.querySelector('script[type="importmap"]').textContent;
+    $('resolved').textContent = `import.meta.resolve('money') → ${import.meta.resolve('money')}. Loaded: ${name}.`;
+    for (const [amount, currency, locale] of AMOUNTS) {
+      const tr = document.createElement('tr');
+      for (const text of [amount, currency, locale, formatMoney(amount, currency, locale)]) {
+        tr.append(Object.assign(document.createElement('td'), { textContent: text }));
+      }
+      $('rows').append(tr);
+    }
+
+    // Switching reloads the page: an import map is fixed once the first module has loaded
+    const current = new URLSearchParams(location.search).get('impl') === 'simple' ? 'simple' : 'intl';
+    document.querySelector(`input[value="${current}"]`).checked = true;
+    document.querySelector('.choose').addEventListener('change', (event) => {
+      const url = new URL(location.href);
+      url.searchParams.set('impl', event.target.value);
+      location.replace(url);
+    });
+  </script>
+</body>
+</html>

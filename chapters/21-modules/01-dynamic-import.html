@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>21-1 Loading Modules on Demand</title>
+  <style>
+    .tool-panel, .log-panel { width: min(760px, 100%); }
+    textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
+    .tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    .result { display: block; padding: 10px 12px; border-radius: 8px; background: var(--surface); overflow-wrap: anywhere; }
+    .result.bad { color: var(--bad); }
+    .log { margin: 0; padding-left: 1.5em; font: 12px/1.7 var(--mono); }
+    .log:empty::before { content: "Nothing imported yet"; color: var(--muted); margin-left: -1.5em; }
+    .log li { overflow-wrap: anywhere; }
+    .log .new { color: var(--good); }
+    .log .bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel tool-panel">
+    <label class="label" for="text">Text</label>
+    <textarea id="text" rows="3">Café notes: the history of JavaScript modules, from script tags to import maps</textarea>
+    <div class="tools" id="tools" role="group" aria-label="Tools">
+      <button class="btn" type="button" data-tool="word-stats">Word stats</button>
+      <button class="btn" type="button" data-tool="title-case">Title Case</button>
+      <button class="btn" type="button" data-tool="slugify">Slugify</button>
+      <button class="btn" type="button" data-tool="spell-check">Spell check (missing)</button>
+    </div>
+    <output class="result" id="result" for="text">Pick a tool. Its code is downloaded the first time you use it.</output>
+  </div>
+  <div class="panel log-panel">
+    <p class="label">Module log · tools used: <output id="uses">0</output></p>
+    <ol class="log" id="log"></ol>
+  </div>
+  <script type="module">
+    // Loaded with the page: a tiny module that counts tool uses
+    import { count } from './tools/usage.js';
+
+    const $ = (id) => document.getElementById(id);
+    const seen = new Map();              // tool name → module namespace, only to compare objects
+
+    function log(text, kind = '') {
+      $('log').append(Object.assign(document.createElement('li'), { textContent: text, className: kind }));
+    }
+
+    async function runTool(name) {
+      const start = performance.now();
+      try {
+        // The path is built from a fixed list of buttons, never from free user input
+        const module = await import(`./tools/${name}.js`);
+        const ms = Math.round(performance.now() - start);
+        if (seen.has(name)) {
+          log(`import('./tools/${name}.js') → ${ms} ms, cached: the same module object (${seen.get(name) === module})`);
+        } else {
+          seen.set(name, module);
+          log(`import('./tools/${name}.js') → downloaded and run in ${ms} ms, exports: ${Object.keys(module).join(', ')}`, 'new');
+        }
+        $('result').textContent = `${module.label}: ${module.default($('text').value)}`;
+        $('result').className = 'result';
+      } catch (error) {
+        log(`import('./tools/${name}.js') → rejected: ${error.name}: ${error.message}`, 'bad');
+        $('result').textContent = 'That tool could not be loaded.';
+        $('result').className = 'result bad';
+      }
+      // count is a live binding: it already shows the tool's recordUse() call
+      $('uses').textContent = count;
+    }
+
+    $('tools').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-tool]');
+      if (button) runTool(button.dataset.tool);
+    });
+  </script>
+</body>
+</html>

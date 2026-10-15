@@ -16,6 +16,8 @@
 //   data-lifetime    seconds a worker may keep running timers after the code finishes (default 15)
 //   data-key         storage key for the learner's edits (default: page path + index)
 // Several <script class="code" data-name="..."> elements give the toolbar an example picker.
+// Several <script class="code" data-file="main.js"> elements make a set of ES module files instead: the first
+// is the entry, the others can be imported from it and from each other as './name.js'. Files always run in "dom" mode.
 // Write </script> inside code as <\/script>.
 //
 // Inside the code: console.* works as in a browser; test(name, fn) and assert.* register checks that run after the code;
@@ -378,14 +380,16 @@
     var lineOffset = 0;
     function where(err) {
       var stack = err && typeof err.stack === 'string' ? err.stack : '';
-      var m = stack.match(/(?:<anonymous>|AsyncFunction|about:srcdoc):(\d+):(\d+)/);
+      // A frame in a file of a multi-file runner is named by the file (its //# sourceURL)
+      var m = stack.match(/(?:<anonymous>|AsyncFunction|about:srcdoc|(?:^|[\s(@])([\w.\-]+\.js)):(\d+):(\d+)/m);
       if (!m) return '';
-      var n = Number(m[1]) - lineOffset;
+      if (m[1]) return ' (' + m[1] + ' line ' + m[2] + ')';
+      var n = Number(m[2]) - lineOffset;
       return n > 0 ? ' (line ' + n + ')' : '';
     }
-    function report(err, prefix) {
+    function report(err, prefix, fallback) {
       if (err instanceof Error) {
-        var text = (prefix || 'Uncaught ') + err.name + ': ' + err.message + where(err);
+        var text = (prefix || 'Uncaught ') + err.name + ': ' + err.message + (where(err) || fallback || '');
         if (err.cause !== undefined) text += '\n  [cause]: ' + brief(err.cause);
         line('error', text);
       } else {
@@ -395,7 +399,9 @@
 
     scope.addEventListener('error', function (event) {
       event.preventDefault();
-      if (event.error) report(event.error);
+      // A syntax error in another file has no stack, only the file name
+      var inFile = /^[\w.\-]+\.js$/.test(event.filename || '') && event.lineno ? ' (' + event.filename + ' line ' + event.lineno + ')' : '';
+      if (event.error) report(event.error, '', inFile);
       else if (isWorker) line('error', 'Uncaught ' + event.message);
       else line('error', event.message + (event.lineno ? ' (line ' + (event.lineno - lineOffset) + ')' : ''));
       if (!isWorker) finish();
@@ -475,6 +481,11 @@
       setLineOffset: function (n) { lineOffset = n; },
       report: report,
       finish: finish,
+      // An import that could not be fetched fires "error" on the module script, not on the window
+      loadFailed: function () {
+        line('error', 'A module could not be loaded. Check the file names in your import statements.');
+        finish();
+      },
     };
   }
 
@@ -648,16 +659,19 @@
   var STUCK_MS = 3000;
 
   function setup(root, index) {
-    var mode = root.dataset.mode === 'dom' ? 'dom' : 'worker';
-    var layout = root.dataset.layout || (mode === 'dom' ? 'split' : 'stack');
-    var lifetime = Number(root.dataset.lifetime || 15) * 1000;
     var codeEls = Array.prototype.slice.call(root.querySelectorAll('script.code, script[type="text/plain"]:not(.tests)'));
-    var examples = codeEls.map(function (s, i) { return { name: s.dataset.name || 'Example ' + (i + 1), code: dedent(s.textContent) }; });
+    var filesMode = codeEls.some(function (s) { return s.dataset.file; });
+    var htmlEl = root.querySelector('template.html');
+    var html = htmlEl ? htmlEl.innerHTML : '';
+    var mode = root.dataset.mode === 'dom' || filesMode ? 'dom' : 'worker';
+    var layout = root.dataset.layout || (mode === 'dom' && (html || !filesMode) ? 'split' : 'stack');
+    var lifetime = Number(root.dataset.lifetime || 15) * 1000;
+    var examples = codeEls.map(function (s, i) {
+      return { name: s.dataset.file || s.dataset.name || 'Example ' + (i + 1), code: dedent(s.textContent) };
+    });
     if (!examples.length) examples.push({ name: 'Example', code: '' });
     var testsEl = root.querySelector('script.tests');
     var tests = testsEl ? dedent(testsEl.textContent) : '';
-    var htmlEl = root.querySelector('template.html');
-    var html = htmlEl ? htmlEl.innerHTML : '';
     var baseKey = 'jsguide:' + (root.dataset.key || location.pathname + '#' + index);
     var current = 0;
     var keyFor = function (i) { return baseKey + (examples.length > 1 ? ':' + i : ''); };
@@ -674,7 +688,18 @@
     var status = el('span', 'pg-status');
     status.setAttribute('aria-live', 'polite');
     var picker = null;
-    if (examples.length > 1) {
+    var fileTabs = null;
+    if (filesMode) {
+      fileTabs = el('div', 'pg-files');
+      fileTabs.setAttribute('role', 'group');
+      fileTabs.setAttribute('aria-label', 'Files');
+      examples.forEach(function (ex, i) {
+        var tab = el('button', 'pg-file', ex.name);
+        tab.type = 'button';
+        tab.dataset.index = String(i);
+        fileTabs.append(tab);
+      });
+    } else if (examples.length > 1) {
       picker = el('select', 'btn');
       picker.setAttribute('aria-label', 'Example');
       examples.forEach(function (ex, i) {
@@ -721,7 +746,10 @@
     testsBox.setAttribute('aria-live', 'polite');
     side.append(output, testsBox);
     body.append(editor, side);
-    box.append(bar, body);
+    box.append(bar);
+    if (fileTabs) box.append(fileTabs);
+    box.append(body);
+    if (frameHost && filesMode && !html) frameHost.hidden = true;
     root.replaceChildren(box);
     if (root.dataset.height) box.style.setProperty('--pg-result-height', root.dataset.height + 'px');
 
@@ -731,11 +759,45 @@
       badge.hidden = !edited;
       resetBtn.disabled = !edited;
     }
+    // Files mode keeps every file's text here while another file is in the editor
+    var buffers = examples.map(function (ex, i) {
+      var saved = filesMode ? store.get(keyFor(i)) : null;
+      return saved !== null ? saved : ex.code;
+    });
     function load(i) {
+      if (filesMode) {
+        buffers[current] = textarea.value;
+        current = i;
+        textarea.value = buffers[i];
+        fileTabs.querySelectorAll('.pg-file').forEach(function (tab, n) { tab.setAttribute('aria-pressed', String(n === i)); });
+        textarea.setAttribute('aria-label', 'Code editor: ' + examples[i].name + '. Press Escape, then Tab, to leave the editor.');
+        refresh();
+        return;
+      }
       current = i;
       var saved = store.get(keyFor(i));
       textarea.value = saved !== null ? saved : examples[i].code;
       refresh();
+    }
+
+    // Files run as ES modules from data: URLs, found through an import map. A data: URL can't resolve
+    // './name.js' relative to itself, so every './name.js' of a known file becomes 'pg:name.js',
+    // and import(…) goes through a helper that does the same for specifiers built at run time.
+    function moduleSource(code) {
+      var names = examples.map(function (ex) { return ex.name; });
+      return code
+        .replace(/(['"])\.\/([\w.\-]+)\1/g, function (all, q, name) { return names.indexOf(name) >= 0 ? q + 'pg:' + name + q : all; })
+        .replace(/\bimport\s*\(/g, '__pgImport(');
+    }
+    function importMap() {
+      var imports = {};
+      examples.forEach(function (ex, i) {
+        if (i === 0) return;
+        // The trailing comment keeps two files with the same text apart, and names the file in stack traces
+        imports['pg:' + ex.name] = 'data:text/javascript;charset=utf-8,' +
+          encodeURIComponent(moduleSource(buffers[i]) + '\n//# sourceURL=' + ex.name);
+      });
+      return JSON.stringify({ imports: imports }).replace(/<\//g, '<\\/');
     }
 
     // ---- Output ----
@@ -872,13 +934,19 @@
       frame.setAttribute('sandbox', 'allow-scripts allow-modals allow-forms allow-popups');
       var theme = document.documentElement.dataset.theme;
       var full = code + (tests ? '\n;\n' + tests : '');
+      var mapTag = '';
+      if (filesMode) {
+        full = moduleSource(full);
+        mapTag = '<script type="importmap">' + importMap() + '<\/script>' +
+          '<script>window.__pgImport = function (s) { return import(typeof s === "string" && s.slice(0, 2) === "./" ? "pg:" + s.slice(2) : s); };<\/script>';
+      }
       var head = '<!doctype html><html' + (theme ? ' data-theme="' + theme + '"' : '') + '><head><meta charset="utf-8">' +
         '<meta name="viewport" content="width=device-width, initial-scale=1">' +
         '<link rel="stylesheet" href="' + styleURL + '"><style>body{padding:12px}</style>' +
         '<script>' + runtime.toString().replace(/<\/script/gi, '<\\/script') +
         '\nwindow.__pg = runtime(function (m) { parent.postMessage(Object.assign({ __pg: true }, m), "*"); }, window, false);' +
-        'window.__pg.setLineOffset(@@OFFSET@@);<\/script>' +
-        '</head><body>' + html + '\n<script type="module">\n';
+        'window.__pg.setLineOffset(@@OFFSET@@);<\/script>' + mapTag +
+        '</head><body>' + html + '\n<script type="module" onerror="window.__pg.loadFailed()">\n';
       // The module's line numbers count from the top of the document; the learner's code starts after `head`
       head = head.replace('@@OFFSET@@', String(head.split('\n').length - 1));
       var srcdoc = head + full.replace(/<\/script/gi, '<\\/script') + '\n;window.__pg.finish();\n<\/script></body></html>';
@@ -905,6 +973,10 @@
       clearTests();
       setStatus('Running…');
       var code = textarea.value;
+      if (filesMode) {
+        buffers[current] = code;
+        code = buffers[0];
+      }
       session = mode === 'dom' ? runDom(code) : runWorker(code);
     }
 
@@ -965,6 +1037,12 @@
       refresh();
       run();
     });
+    if (fileTabs) {
+      fileTabs.addEventListener('click', function (e) {
+        var tab = e.target.closest('.pg-file');
+        if (tab) load(Number(tab.dataset.index));
+      });
+    }
     if (picker) {
       picker.addEventListener('change', function () {
         load(Number(picker.value));
@@ -982,7 +1060,13 @@
       },
     };
 
-    load(0);
+    if (filesMode) {
+      textarea.value = buffers[0];
+      fileTabs.firstChild.setAttribute('aria-pressed', 'true');
+      refresh();
+    } else {
+      load(0);
+    }
     clearOutput();
     clearTests();
     if (root.dataset.autorun !== 'false') run();
