@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 6-3 · Final: Update Without Mutating</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 6-3">
+    <script type="text/plain" class="code">
+      // Return NEW settings with `changes` applied to settings.display.
+      // The original settings object must not change.
+      function updateDisplay(settings, changes) {
+        return {
+          ...settings,                                  // copy the top level
+          display: { ...settings.display, ...changes }, // and the one nested object we change
+        };
+      }
+
+      const settings = { user: 'ada', display: { theme: 'light', fontSize: 16 } };
+      const next = updateDisplay(settings, { theme: 'dark' });
+      console.log(settings.display.theme, next.display.theme);   // should be: light dark
+    </script>
+    <script type="text/plain" class="tests">
+      const make = () => ({ user: 'ada', display: { theme: 'light', fontSize: 16 } });
+      test('applies the changes', () => assert.deepEqual(updateDisplay(make(), { theme: 'dark' }).display, { theme: 'dark', fontSize: 16 }));
+      test('keeps the other settings', () => assert.equal(updateDisplay(make(), { theme: 'dark' }).user, 'ada'));
+      test('does not change the original', () => {
+        const original = make();
+        updateDisplay(original, { theme: 'dark', fontSize: 20 });
+        assert.deepEqual(original, make());
+      });
+      test('returns new objects', () => {
+        const original = make();
+        const next = updateDisplay(original, {});
+        assert.notEqual(next, original);
+        assert.notEqual(next.display, original.display);
+      });
+    </script>
+  </div>
+</body>
+</html>

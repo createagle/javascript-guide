@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>6-2 Working With Objects and JSON</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Objects and JSON">
+    <script type="text/plain" class="code" data-name="Literals and access">
+      const key = 'favorite color';
+      const name = 'Ada';
+
+      const user = {
+        name,                      // shorthand for name: name
+        'home city': 'London',     // keys with spaces need quotes
+        [key]: 'teal',             // computed key
+        greet() {                  // method shorthand
+          return `Hi, I am ${this.name}`;
+        },
+      };
+
+      console.log(user.name, user['home city'], user[key]);
+      console.log(user.greet());
+      console.log(user.age, user.address?.city);   // missing → undefined
+
+      user.age = 36;               // add
+      delete user['home city'];    // remove
+      console.log('age' in user, Object.hasOwn(user, 'greet'), user);
+    </script>
+    <script type="text/plain" class="code" data-name="Destructuring and spread">
+      const user = { name: 'Ada', role: 'admin', address: { city: 'London' } };
+
+      // Pick properties into variables, rename, give defaults, keep the rest
+      const { name, role: job, team = 'none', ...others } = user;
+      console.log(name, job, team, others);
+
+      // Nested destructuring
+      const { address: { city } } = user;
+      console.log(city);
+
+      // Spread copies properties; later ones win
+      const updated = { ...user, role: 'owner', active: true };
+      console.log(updated);
+
+      // Destructuring in parameters
+      function describe({ name, role = 'guest' }) {
+        return `${name} (${role})`;
+      }
+      console.log(describe(user), describe({ name: 'Linus' }));
+    </script>
+    <script type="text/plain" class="code" data-name="Object.keys, values and entries">
+      const prices = { tea: 3, coffee: 4.5, cake: 6 };
+
+      console.log(Object.keys(prices));
+      console.log(Object.values(prices));
+      console.log(Object.entries(prices));
+
+      for (const [item, price] of Object.entries(prices)) {
+        console.log(`${item}: $${price.toFixed(2)}`);
+      }
+
+      // entries → transform → fromEntries: a new object with 10% off
+      const sale = Object.fromEntries(
+        Object.entries(prices).map(([item, price]) => [item, +(price * 0.9).toFixed(2)]),
+      );
+      console.log(sale);
+
+      // Integer-like keys come first, in ascending order
+      console.log(Object.keys({ b: 1, 2: 1, a: 1, 1: 1 }));
+    </script>
+    <script type="text/plain" class="code" data-name="Freeze and descriptors">
+      const config = Object.freeze({ theme: 'dark', sizes: { base: 16 } });
+
+      try {
+        config.theme = 'light';           // strict mode: TypeError
+      } catch (error) {
+        console.error(error.message);
+      }
+      config.sizes.base = 20;             // freeze is shallow
+      console.log(config);
+
+      const account = {};
+      Object.defineProperty(account, 'id', { value: 42, enumerable: false });
+      console.log(account.id, Object.keys(account), JSON.stringify(account));
+      console.log(Object.getOwnPropertyDescriptor(account, 'id'));
+    </script>
+    <script type="text/plain" class="code" data-name="JSON.stringify">
+      const order = {
+        id: 7,
+        items: ['tea', 'cake'],
+        placedAt: new Date('2026-10-15T09:30:00Z'),
+        note: undefined,            // dropped
+        total: NaN,                 // becomes null
+        print() {},                 // dropped
+      };
+
+      console.log(JSON.stringify(order));
+      console.log(JSON.stringify(order, ['id', 'items']));     // only these keys
+      console.log(JSON.stringify({ a: 1, b: [1, 2] }, null, 2)); // pretty-print
+
+      try {
+        JSON.stringify({ big: 10n });
+      } catch (error) {
+        console.error(error.name + ': ' + error.message);
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="JSON.parse with a reviver">
+      const text = '{"id":7,"placedAt":"2026-10-15T09:30:00.000Z","items":["tea"]}';
+
+      const plain = JSON.parse(text);
+      console.log(typeof plain.placedAt);        // still a string
+
+      const revived = JSON.parse(text, (key, value) =>
+        key === 'placedAt' ? new Date(value) : value,
+      );
+      console.log(revived.placedAt instanceof Date, revived.placedAt.getUTCHours());
+
+      try {
+        JSON.parse("{ id: 7 }");                  // keys must be double-quoted
+      } catch (error) {
+        console.error(error.name);
+      }
+    </script>
+  </div>
+</body>
+</html>

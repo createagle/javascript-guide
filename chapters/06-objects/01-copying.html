@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>6-1 Five Ways to Copy an Object</title>
+  <style>
+    .stage { width: min(900px, 100%); flex-direction: column; align-items: stretch; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    thead th { font-size: 12px; color: var(--muted); font-weight: 600; vertical-align: bottom; text-align: center; max-width: 90px; }
+    thead th:first-child { text-align: left; }
+    tbody th { text-align: left; font-weight: 400; white-space: nowrap; }
+    td { text-align: center; font-weight: 700; font-size: 15px; cursor: help; }
+    .legend { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="stage">
+    <div class="panel">
+      <p class="label">The original</p>
+      <pre class="code" id="source"></pre>
+    </div>
+    <div class="panel wide">
+      <p class="label">What each copy keeps, measured live in this browser</p>
+      <div class="scroll"><table id="matrix"></table></div>
+      <p class="legend"><span class="good">✓</span> independent or preserved · <span class="bad">✗</span> shared with the original or lost · hover a cell for details</p>
+    </div>
+  </div>
+  <script>
+    // A fresh original for every test, so one test cannot affect another
+    const makeOriginal = () => ({
+      name: 'Ada',
+      address: { city: 'London' },
+      tags: ['math'],
+      born: new Date('1815-12-10T00:00:00Z'),
+      skills: new Map([['math', 10]]),
+      nickname: undefined,
+      greet() { return 'Hi'; },
+    });
+
+    const methods = [
+      ['copy = original', (o) => o],
+      ['{ ...original }', (o) => ({ ...o })],
+      ['Object.assign({}, original)', (o) => Object.assign({}, o)],
+      ['structuredClone(original)', (o) => {
+        // structuredClone refuses functions, so clone the rest
+        const { greet, ...rest } = o;
+        return structuredClone(rest);
+      }],
+      ['JSON.parse(JSON.stringify(original))', (o) => JSON.parse(JSON.stringify(o))],
+    ];
+
+    // Each check returns [ok, detail]
+    const checks = [
+      ['Top level is separate', (copy, o) => {
+        copy.name = 'Grace';
+        return [o.name === 'Ada', `original.name is '${o.name}' after copy.name = 'Grace'`];
+      }],
+      ['Nested object is separate', (copy, o) => {
+        copy.address.city = 'Paris';
+        return [o.address.city === 'London', `original.address.city is '${o.address.city}' after changing the copy`];
+      }],
+      ['Nested array is separate', (copy, o) => {
+        copy.tags.push('code');
+        return [o.tags.length === 1, `original.tags is [${o.tags}] after copy.tags.push('code')`];
+      }],
+      ['Date stays a Date', (copy) => [copy.born instanceof Date, `copy.born is ${copy.born instanceof Date ? 'a Date' : typeof copy.born + ' ' + JSON.stringify(copy.born)}`]],
+      ['Map stays a Map', (copy) => [copy.skills instanceof Map, `copy.skills is ${copy.skills instanceof Map ? 'a Map' : JSON.stringify(copy.skills)}`]],
+      ['undefined property kept', (copy) => ['nickname' in copy, `'nickname' in copy is ${'nickname' in copy}`]],
+      ['Method kept', (copy) => [typeof copy.greet === 'function', `typeof copy.greet is '${typeof copy.greet}'`]],
+    ];
+
+    document.getElementById('source').textContent = `const original = {
+  name: 'Ada',
+  address: { city: 'London' },
+  tags: ['math'],
+  born: new Date('1815-12-10'),
+  skills: new Map([['math', 10]]),
+  nickname: undefined,
+  greet() { return 'Hi'; },
+};`;
+
+    const table = document.getElementById('matrix');
+    const head = table.createTHead().insertRow();
+    head.append(Object.assign(document.createElement('th'), { textContent: 'Copy made with' }));
+    for (const [label] of checks) head.append(Object.assign(document.createElement('th'), { textContent: label }));
+    const body = table.createTBody();
+    for (const [label, copyFn] of methods) {
+      const row = body.insertRow();
+      const th = document.createElement('th');
+      th.scope = 'row';
+      th.innerHTML = '<code></code>';
+      th.firstChild.textContent = label;
+      row.append(th);
+      for (const [, check] of checks) {
+        const original = makeOriginal();
+        const [ok, detail] = check(copyFn(original), original);
+        const td = row.insertCell();
+        td.className = ok ? 'good' : 'bad';
+        td.textContent = ok ? '✓' : '✗';
+        td.title = detail;
+        td.setAttribute('aria-label', `${ok ? 'yes' : 'no'}: ${detail}`);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 6-2 · Final: Count Words</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 6-2">
+    <script type="text/plain" class="code">
+      // Count how often each word appears, ignoring case.
+      // countWords('The cat and the hat') → { the: 2, cat: 1, and: 1, hat: 1 }
+      function countWords(text) {
+        // An object with no prototype has no inherited keys like 'constructor' or 'toString'
+        const counts = Object.create(null);
+        for (const word of text.toLowerCase().split(/\s+/).filter(Boolean)) {
+          counts[word] = (counts[word] ?? 0) + 1;
+        }
+        return counts;
+      }
+
+      console.log(countWords('The cat and the hat'));
+      console.log(countWords('the constructor of the constructor'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('counts words ignoring case', () => {
+        const c = countWords('The cat and the hat');
+        assert.equal(c.the, 2);
+        assert.equal(c.cat, 1);
+      });
+      test('extra spaces do not count as words', () => assert.deepEqual(Object.keys(countWords('  a   b  ')), ['a', 'b']));
+      test("counts the word 'constructor'", () => assert.equal(countWords('constructor constructor').constructor, 2));
+      test("counts the word 'toString'", () => assert.equal(countWords('toString').tostring, 1));
+    </script>
+  </div>
+</body>
+</html>

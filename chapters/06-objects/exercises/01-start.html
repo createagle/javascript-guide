@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 6-1 · Start: pick()</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 6-1">
+    <script type="text/plain" class="code">
+      // Return a NEW object with only the given keys that exist on obj.
+      // pick({ a: 1, b: 2, c: 3 }, ['a', 'c', 'z']) → { a: 1, c: 3 }
+      function pick(obj, keys) {
+        // your code here
+      }
+
+      console.log(pick({ a: 1, b: 2, c: 3 }, ['a', 'c', 'z']));
+    </script>
+    <script type="text/plain" class="tests">
+      test('keeps the listed keys', () => assert.deepEqual(pick({ a: 1, b: 2, c: 3 }, ['a', 'c']), { a: 1, c: 3 }));
+      test('skips keys that do not exist', () => assert.deepEqual(pick({ a: 1 }, ['a', 'z']), { a: 1 }));
+      test('keeps falsy values', () => assert.deepEqual(pick({ a: 0, b: '', c: null }, ['a', 'b', 'c']), { a: 0, b: '', c: null }));
+      test('returns a new object', () => {
+        const source = { a: 1 };
+        assert.notEqual(pick(source, ['a']), source);
+      });
+      test('ignores inherited properties', () => assert.deepEqual(pick({}, ['toString']), {}));
+    </script>
+  </div>
+</body>
+</html>
