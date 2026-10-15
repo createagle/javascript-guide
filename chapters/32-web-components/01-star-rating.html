@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>32-1 A Star Rating Component</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .layout .panel { display: grid; gap: 12px; }
+    .field { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 14px; }
+    .field label { min-width: 9em; }
+    label.field input { flex: 1; min-width: 0; font: inherit; color: var(--fg); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 10px; padding: 10px 12px; margin: 0; min-width: 0; }
+    legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+    output { font: 12px/1.5 var(--mono); overflow-wrap: anywhere; min-height: 1.5em; }
+    .extra:empty { display: none; }
+
+    .log { list-style: none; margin: 0; padding: 0; font: 12px/1.6 var(--mono); max-height: 320px; overflow: auto; overflow-wrap: anywhere; }
+    .log li { border-bottom: 1px solid var(--border); padding: 2px 0; }
+    .log li b { color: var(--accent); font-weight: 600; }
+    .log:empty::before { content: 'Nothing yet.'; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <form class="panel" id="review" novalidate>
+      <label class="field">Your name <input name="name" autocomplete="name" required></label>
+      <fieldset id="ratings">
+        <legend>Ratings</legend>
+        <div class="field"><label for="food">Food</label> <star-rating id="food" name="food" required></star-rating></div>
+        <div class="field"><label for="service">Service</label> <star-rating id="service" name="service" value="3"></star-rating></div>
+        <div class="field"><label for="ambience">Ambience (out of 10)</label> <star-rating id="ambience" name="ambience" max="10" value="7"></star-rating></div>
+      </fieldset>
+      <label class="check"><input type="checkbox" id="lock"> Disable the fieldset</label>
+      <div class="buttons">
+        <button class="btn btn-primary" type="submit">Submit</button>
+        <button class="btn" type="reset">Reset</button>
+      </div>
+      <output id="result" for="review"></output>
+    </form>
+    <section class="panel" aria-labelledby="log-title">
+      <p class="label" id="log-title">Lifecycle callbacks</p>
+      <div class="buttons">
+        <button class="btn" type="button" id="add">Add a rating</button>
+        <button class="btn" type="button" id="max">Change its max</button>
+        <button class="btn" type="button" id="remove">Remove it</button>
+        <button class="btn" type="button" id="clear">Clear log</button>
+      </div>
+      <div class="extra" id="extra"></div>
+      <ol class="log" id="log"></ol>
+    </section>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    function write(who, text) {
+      const li = document.createElement('li');
+      li.append(Object.assign(document.createElement('b'), { textContent: who }), ` ${text}`);
+      $('log').append(li);
+      li.scrollIntoView({ block: 'nearest' });
+    }
+
+    // One stylesheet, shared by the shadow roots of every <star-rating>
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`
+      :host { display: inline-flex; border-radius: 6px; cursor: pointer; outline-offset: 2px; }
+      :host(:focus-visible) { outline: 2px solid var(--accent, #2563eb); }
+      :host(:state(disabled)) { opacity: 0.45; cursor: not-allowed; }
+      .stars { display: flex; flex-wrap: wrap; font-size: 24px; line-height: 1; color: var(--border, #d6d3d1); }
+      .on { color: #f59e0b; }
+    `);
+
+    class StarRating extends HTMLElement {
+      static formAssociated = true;                       // takes part in forms, like <input>
+      static observedAttributes = ['value', 'max'];
+      #internals = this.attachInternals();
+      #stars = document.createElement('div');
+      #initial = 0;
+      #disabled = false;
+
+      constructor() {
+        super();
+        write(this.id || 'new', 'constructor()');
+        const root = this.attachShadow({ mode: 'open' });
+        root.adoptedStyleSheets = [sheet];
+        this.#stars.className = 'stars';
+        this.#stars.setAttribute('part', 'stars');
+        root.append(this.#stars);
+        this.#aria('role', 'slider');
+        root.addEventListener('click', (event) => {
+          const star = event.target.closest('[data-value]');
+          if (star) this.#choose(Number(star.dataset.value));
+        });
+        this.addEventListener('keydown', (event) => this.#key(event));
+      }
+
+      get value() { return Math.min(Math.max(Math.round(Number(this.getAttribute('value')) || 0), 0), this.max); }
+      set value(value) { this.setAttribute('value', value); }
+      get max() { return Math.max(Number(this.getAttribute('max')) || 5, 1); }
+      set max(value) { this.setAttribute('max', value); }
+      get form() { return this.#internals.form; }
+      get labels() { return this.#internals.labels; }
+      get validity() { return this.#internals.validity; }
+      checkValidity() { return this.#internals.checkValidity(); }
+
+      connectedCallback() {
+        write(this.id, 'connectedCallback()');
+        this.#initial = this.value;
+        if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
+        this.#render();
+      }
+      disconnectedCallback() {
+        write(this.id, 'disconnectedCallback()');
+      }
+      attributeChangedCallback(name, oldValue, newValue) {
+        write(this.id || 'new', `attributeChangedCallback('${name}', ${JSON.stringify(oldValue)}, ${JSON.stringify(newValue)})`);
+        this.#render();
+      }
+      // Called by the form
+      formResetCallback() {
+        write(this.id, 'formResetCallback()');
+        this.value = this.#initial;
+      }
+      formDisabledCallback(disabled) {
+        write(this.id, `formDisabledCallback(${disabled})`);
+        this.#disabled = disabled;
+        this.tabIndex = disabled ? -1 : 0;
+        this.#aria('ariaDisabled', String(disabled));
+        try { this.#internals.states[disabled ? 'add' : 'delete']('disabled'); } catch { /* no custom states */ }
+      }
+
+      #choose(value) {
+        if (this.#disabled) return;
+        const next = Math.min(Math.max(value, 0), this.max);
+        if (next === this.value) return;
+        this.value = next;
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      #key(event) {
+        const steps = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 };
+        if (event.key in steps) this.#choose(this.value + steps[event.key]);
+        else if (event.key === 'Home') this.#choose(0);
+        else if (event.key === 'End') this.#choose(this.max);
+        else return;
+        event.preventDefault();
+      }
+      // ARIA through ElementInternals when supported, otherwise as attributes on the element
+      #aria(name, value) {
+        if (name in this.#internals) this.#internals[name] = value;
+        else this.setAttribute(name === 'role' ? 'role' : `aria-${name.slice(4).toLowerCase()}`, value);
+      }
+      #render() {
+        const { value, max } = this;
+        if (this.#stars.children.length !== max) {
+          this.#stars.replaceChildren(...Array.from({ length: max }, (_, i) =>
+            Object.assign(document.createElement('span'), { textContent: '★', ariaHidden: 'true' })));
+          [...this.#stars.children].forEach((star, i) => { star.dataset.value = i + 1; });
+        }
+        [...this.#stars.children].forEach((star, i) => star.classList.toggle('on', i < value));
+        this.#aria('ariaValueMin', '0');
+        this.#aria('ariaValueMax', String(max));
+        this.#aria('ariaValueNow', String(value));
+        this.#aria('ariaValueText', value ? `${value} of ${max} stars` : 'no rating');
+        // What the form submits, and whether it is valid
+        this.#internals.setFormValue(value ? String(value) : null);
+        if (this.hasAttribute('required') && !value) this.#internals.setValidity({ valueMissing: true }, 'Please choose a rating.', this.#stars);
+        else this.#internals.setValidity({});
+      }
+    }
+    customElements.define('star-rating', StarRating);
+
+    // ---- The page ----
+    const form = $('review');
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) {
+        $('result').textContent = 'Not sent: the form is invalid.';
+        return;
+      }
+      $('result').textContent = `FormData: ${JSON.stringify(Object.fromEntries(new FormData(form)))}`;
+    });
+    form.addEventListener('change', (event) => {
+      if (event.target.localName === 'star-rating') $('result').textContent = `change: ${event.target.id} = ${event.target.value}`;
+    });
+    form.addEventListener('reset', () => { $('result').textContent = ''; });
+    $('lock').addEventListener('change', () => { $('ratings').disabled = $('lock').checked; });
+
+    let extra = null;
+    $('add').addEventListener('click', () => {
+      if (extra) return;
+      extra = document.createElement('star-rating');   // constructor() runs now, before it is on the page
+      extra.id = 'extra';
+      extra.setAttribute('aria-label', 'Extra rating');
+      extra.value = 2;
+      $('extra').append(extra);                         // connectedCallback() runs now
+    });
+    $('max').addEventListener('click', () => { if (extra) extra.max = extra.max === 5 ? 3 : 5; });
+    $('remove').addEventListener('click', () => {
+      extra?.remove();
+      extra = null;
+    });
+    $('clear').addEventListener('click', () => $('log').replaceChildren());
+  </script>
+</body>
+</html>

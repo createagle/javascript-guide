@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 32-3 · Final: A Form-Associated Switch</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 32-3" data-mode="dom" data-height="190">
+    <template class="html">
+      <form id="form">
+        <p><span id="news-label">Newsletter</span> <toggle-switch name="newsletter" value="yes" checked aria-labelledby="news-label"></toggle-switch></p>
+        <p><span id="terms-label">I accept the terms</span> <toggle-switch name="terms" required aria-labelledby="terms-label"></toggle-switch></p>
+        <p><button>Save</button> <button type="reset">Reset</button></p>
+        <output id="out"></output>
+      </form>
+      <style>
+        form { font: 14px system-ui, sans-serif; }
+        toggle-switch { display: inline-block; vertical-align: middle; width: 40px; height: 22px; border-radius: 11px; background: #a8a29e; position: relative; cursor: pointer; }
+        toggle-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left 0.15s; }
+        toggle-switch[aria-checked="true"] { background: #2563eb; }
+        toggle-switch[aria-checked="true"]::after { left: 21px; }
+        toggle-switch:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+        output { font: 12px ui-monospace, monospace; }
+      </style>
+    </template>
+    <script type="text/plain" class="code">
+      // <toggle-switch name="newsletter" value="yes"> must work like a checkbox inside a <form>:
+      // - it is form-associated: when on, the form data has name → value ("on" without a value attribute); when off, nothing
+      // - the `checked` property reflects the `checked` attribute; the state when it joined the page is its default
+      // - a click or the Space key toggles it and dispatches a "change" event that bubbles
+      // - it has role="switch", aria-checked="true"/"false" and is focusable
+      // - form.reset() puts it back to its default (formResetCallback)
+      // - with the `required` attribute it is invalid (valueMissing) while off
+      class ToggleSwitch extends HTMLElement {
+        static formAssociated = true;
+        static observedAttributes = ['checked', 'required', 'value'];
+        #internals = this.attachInternals();
+        #default = false;
+
+        constructor() {
+          super();
+          // Listeners in the constructor: added once, even if the element is moved around
+          this.addEventListener('click', () => this.#toggle());
+          this.addEventListener('keydown', (event) => {
+            if (event.key !== ' ') return;
+            event.preventDefault();          // Space would scroll the page
+            this.#toggle();
+          });
+        }
+        connectedCallback() {
+          this.#default = this.checked;
+          this.setAttribute('role', 'switch');
+          if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
+          this.#sync();
+        }
+        attributeChangedCallback() {
+          this.#sync();
+        }
+
+        get checked() { return this.hasAttribute('checked'); }
+        set checked(on) { this.toggleAttribute('checked', Boolean(on)); }
+        get form() { return this.#internals.form; }
+        get validity() { return this.#internals.validity; }
+        checkValidity() { return this.#internals.checkValidity(); }
+        formResetCallback() { this.checked = this.#default; }
+
+        #toggle() {
+          this.checked = !this.checked;
+          this.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        #sync() {
+          this.setAttribute('aria-checked', String(this.checked));
+          this.#internals.setFormValue(this.checked ? (this.getAttribute('value') ?? 'on') : null);
+          if (this.hasAttribute('required') && !this.checked) {
+            this.#internals.setValidity({ valueMissing: true }, 'Please turn this on.');
+          } else {
+            this.#internals.setValidity({});
+          }
+        }
+      }
+      customElements.define('toggle-switch', ToggleSwitch);
+
+      const form = document.querySelector('#form');
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        document.querySelector('#out').value = form.reportValidity()
+          ? JSON.stringify(Object.fromEntries(new FormData(form)))
+          : 'invalid';
+      });
+    </script>
+    <script type="text/plain" class="tests">
+      const [news, terms] = form.querySelectorAll('toggle-switch');
+      const data = () => Object.fromEntries(new FormData(form));
+
+      test('it is part of the form', () => {
+        assert.ok([...form.elements].includes(news), 'form.elements should list it');
+      });
+      test('FormData has name → value only while it is on', () => {
+        assert.deepEqual(data(), { newsletter: 'yes' });
+        terms.checked = true;
+        assert.deepEqual(data(), { newsletter: 'yes', terms: 'on' });
+      });
+      test('click and Space toggle it, with a change event and aria-checked', () => {
+        let changes = 0;
+        form.addEventListener('change', () => changes++);
+        news.click();
+        assert.equal(news.checked, false);
+        assert.equal(news.getAttribute('aria-checked'), 'false');
+        news.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        assert.equal(news.checked, true);
+        assert.equal(news.getAttribute('aria-checked'), 'true');
+        assert.equal(changes, 2);
+      });
+      test('it is focusable and has role="switch"', () => {
+        assert.equal(news.tabIndex, 0);
+        assert.equal(news.getAttribute('role'), 'switch');
+      });
+      test('required: the form is invalid while it is off', () => {
+        terms.checked = false;
+        assert.equal(form.checkValidity(), false);
+        assert.equal(terms.validity.valueMissing, true);
+        terms.checked = true;
+        assert.equal(form.checkValidity(), true);
+      });
+      test('form.reset() restores the defaults', () => {
+        news.checked = false;
+        terms.checked = true;
+        form.reset();
+        assert.equal(news.checked, true);
+        assert.equal(terms.checked, false);
+      });
+    </script>
+  </div>
+</body>
+</html>

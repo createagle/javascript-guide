@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 32-1 · Start: A Character Counter Element</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 32-1" data-mode="dom" data-height="170">
+    <template class="html">
+      <p><label for="bio">Bio</label></p>
+      <textarea id="bio" rows="3" cols="30">Hello</textarea>
+      <p><char-counter for="bio" max="10"></char-counter></p>
+      <style>
+        char-counter { font: 13px system-ui, sans-serif; color: #78716c; }
+        char-counter[over] { color: #dc2626; font-weight: 600; }
+      </style>
+    </template>
+    <script type="text/plain" class="code">
+      // <char-counter for="bio" max="140"></char-counter> shows "count / max" for the field with id="bio".
+      // - as soon as it is on the page, find the field and show the count; update it on every input event
+      // - when the max attribute changes, update the text
+      // - set the `over` attribute on itself while the count is above max
+      // - when it is removed from the page, stop listening; when it is added again, start again
+      class CharCounter extends HTMLElement {
+        constructor() {
+          super();
+          const field = document.getElementById(this.getAttribute('for'));
+          field.addEventListener('input', () => {
+            this.textContent = `${field.value.length} / ${this.getAttribute('max')}`;
+          });
+        }
+      }
+      customElements.define('char-counter', CharCounter);
+    </script>
+    <script type="text/plain" class="tests">
+      const field = document.querySelector('#bio');
+      const counter = document.querySelector('char-counter');
+      const type = (text) => {
+        field.value = text;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      test('shows the count as soon as it is on the page', () => {
+        assert.equal(counter.textContent, '5 / 10');
+      });
+      test('updates on input and marks itself over the limit', () => {
+        type('Hello there');
+        assert.equal(counter.textContent, '11 / 10');
+        assert.ok(counter.hasAttribute('over'), 'should have the over attribute');
+        type('Hi');
+        assert.ok(!counter.hasAttribute('over'), 'should lose the over attribute');
+      });
+      test('follows changes to the max attribute', () => {
+        counter.setAttribute('max', '20');
+        assert.equal(counter.textContent, '2 / 20');
+      });
+      test('works when created with document.createElement', () => {
+        const extra = document.createElement('char-counter');
+        extra.setAttribute('for', 'bio');
+        extra.setAttribute('max', '5');
+        document.body.append(extra);
+        assert.equal(extra.textContent, '2 / 5');
+        extra.remove();
+      });
+      test('stops listening when removed, starts again when added back', () => {
+        const parent = counter.parentElement;
+        counter.remove();
+        type('Something longer');
+        assert.equal(counter.textContent, '2 / 20');
+        parent.append(counter);
+        assert.equal(counter.textContent, '16 / 20');
+      });
+    </script>
+  </div>
+</body>
+</html>

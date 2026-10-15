@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 32-2 · Start: A Box with Shadow DOM and Slots</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 32-2" data-mode="dom" data-height="260">
+    <template class="html">
+      <template id="info-box-template">
+        <div part="box">
+          <strong><slot name="title">Note</slot></strong>
+          <slot></slot>
+        </div>
+      </template>
+      <info-box id="tip"><span slot="title">Tip</span>Press Run to try your code.</info-box>
+      <info-box id="plain">No title here, so the fallback is shown.</info-box>
+      <info-box id="warn" type="warning"><span slot="title">Careful</span>This one is a warning.</info-box>
+      <info-box id="green" style="--info-box-color: rgb(22, 163, 74)">Coloured from outside with a custom property.</info-box>
+      <style>
+        /* Page styles: they must not change the inside of the boxes */
+        strong { color: rgb(255, 0, 0); }
+      </style>
+    </template>
+    <script type="text/plain" class="code">
+      // <info-box> shows its content in a box with a title. Build it with Shadow DOM:
+      // - attach an OPEN shadow root and put a copy of #info-box-template in it
+      //   (the template has a "title" slot with the fallback text "Note", and a default slot)
+      // - style it from inside: the host is display: block; the [part="box"] element has a 4px left border
+      //   in var(--info-box-color, #2563eb), and #b45309 when the host has type="warning"
+      // - the page's own CSS (strong { color: red }) must not reach inside
+      class InfoBox extends HTMLElement {
+        connectedCallback() {
+          // Copies the template into the light DOM: nothing is encapsulated and the slots do nothing
+          this.append(document.querySelector('#info-box-template').content.cloneNode(true));
+        }
+      }
+      customElements.define('info-box', InfoBox);
+    </script>
+    <script type="text/plain" class="tests">
+      const box = (id) => document.getElementById(id);
+      const inside = (id, selector) => box(id).shadowRoot?.querySelector(selector);
+
+      test('each box has an open shadow root made from the template', () => {
+        for (const id of ['tip', 'plain', 'warn', 'green']) {
+          assert.ok(box(id).shadowRoot, `#${id} has no open shadow root`);
+          assert.ok(inside(id, '[part="box"]'), `#${id} has no [part="box"] inside`);
+        }
+      });
+      test('the content goes through the slots', () => {
+        const [title] = inside('tip', 'slot[name="title"]').assignedNodes();
+        assert.equal(title.textContent, 'Tip');
+        const body = inside('tip', 'slot:not([name])').assignedNodes().map((n) => n.textContent).join('');
+        assert.equal(body, 'Press Run to try your code.');
+      });
+      test('without a title, the slot shows its fallback', () => {
+        const slot = inside('plain', 'slot[name="title"]');
+        assert.equal(slot.assignedNodes().length, 0);
+        assert.equal(slot.textContent, 'Note');
+      });
+      test('the host is a block, and the border colour follows type and --info-box-color', () => {
+        assert.equal(getComputedStyle(box('tip')).display, 'block');
+        const border = (id) => getComputedStyle(inside(id, '[part="box"]')).borderLeftColor;
+        assert.equal(border('tip'), 'rgb(37, 99, 235)');
+        assert.equal(border('warn'), 'rgb(180, 83, 9)');
+        assert.equal(border('green'), 'rgb(22, 163, 74)');
+      });
+      test('page CSS does not reach inside the shadow root', () => {
+        assert.notEqual(getComputedStyle(inside('plain', 'strong')).color, 'rgb(255, 0, 0)');
+      });
+    </script>
+  </div>
+</body>
+</html>

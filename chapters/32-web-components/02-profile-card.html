@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>32-2 A Card with Slots</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .cards { display: grid; gap: 12px; }
+
+    .log { list-style: none; margin: 0; padding: 0; font: 12px/1.6 var(--mono); max-height: 320px; overflow: auto; overflow-wrap: anywhere; }
+    .log li { border-bottom: 1px solid var(--border); padding: 2px 0; }
+    .log li b { color: var(--accent); font-weight: 600; }
+    .log:empty::before { content: 'Nothing yet.'; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <template id="profile-card">
+    <style>
+      :host { display: block; border: 1px solid var(--border, #d6d3d1); border-top: 4px solid var(--card-accent, #2563eb); border-radius: 10px; padding: 14px 16px; background: var(--bg, #fff); }
+      header { display: flex; gap: 12px; align-items: center; }
+      .avatar { flex: none; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--surface, #f5f5f4); color: var(--muted, #78716c); font-size: 22px; }
+      ::slotted(img) { width: 56px; height: 56px; display: block; }
+      ::slotted([slot='name']) { margin: 0; font-size: 18px; }
+      ::slotted([slot='role']) { margin: 0; color: var(--card-accent, #2563eb); font-size: 13px; }
+      .bio { margin-top: 10px; font-size: 14px; }
+      footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+      :host([compact]) .bio { display: none; }
+      p { color: rgb(220 38 38); }   /* only matches <p> inside the shadow root: there are none */
+    </style>
+    <header part="header">
+      <div class="avatar"><slot name="avatar">?</slot></div>
+      <div><slot name="name"><strong>Anonymous</strong></slot><slot name="role"></slot></div>
+    </header>
+    <div class="bio"><slot>No bio yet.</slot></div>
+    <footer part="actions"><slot name="actions"></slot></footer>
+  </template>
+
+  <div class="controls">
+    <label class="control"><input type="checkbox" id="compact"> compact attribute</label>
+    <label class="control">--card-accent <input type="color" id="accent" value="#2563eb"></label>
+    <label class="control"><input type="checkbox" id="page-css"> Page CSS for h2 and p</label>
+    <label class="control"><input type="checkbox" id="part-css"> Page CSS for ::part(header)</label>
+    <button class="btn" type="button" id="add-action">Add an action</button>
+  </div>
+  <div class="layout">
+    <div class="cards" id="cards">
+      <profile-card id="ada">
+        <img slot="avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Crect width='56' height='56' fill='%237c3aed'/%3E%3Ctext x='28' y='35' font-size='20' text-anchor='middle' fill='white' font-family='sans-serif'%3EAL%3C/text%3E%3C/svg%3E" alt="">
+        <h2 slot="name">Ada Lovelace</h2>
+        <p slot="role">Mathematician</p>
+        <p>Wrote what is often called the first computer program, for Charles Babbage’s Analytical Engine.</p>
+        <button class="btn" slot="actions" type="button">Follow</button>
+      </profile-card>
+      <profile-card id="grace">
+        <h2 slot="name">Grace Hopper</h2>
+        <p>Built one of the first compilers and helped create COBOL.</p>
+      </profile-card>
+      <profile-card id="nobody"></profile-card>
+    </div>
+    <section class="panel" aria-labelledby="log-title">
+      <p class="label" id="log-title">slotchange events</p>
+      <ol class="log" id="log"></ol>
+    </section>
+  </div>
+  <style id="page-rules" media="not all">
+    #cards h2 { color: rgb(220 38 38); }
+    #cards p { font-style: italic; }
+  </style>
+  <style id="part-rules" media="not all">
+    profile-card::part(header) { background: var(--surface); border-radius: 8px; padding: 6px; }
+  </style>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    class ProfileCard extends HTMLElement {
+      constructor() {
+        super();
+        const root = this.attachShadow({ mode: 'open' });
+        root.append($('profile-card').content.cloneNode(true));   // a fresh copy of the template per card
+        // Fired when the elements assigned to a slot change
+        root.addEventListener('slotchange', (event) => {
+          const slot = event.target;
+          const names = slot.assignedElements().map((el) => el.localName).join(', ') || 'nothing (fallback shown)';
+          const li = document.createElement('li');
+          li.append(Object.assign(document.createElement('b'), { textContent: `#${this.id}` }), ` slot "${slot.name || 'default'}": ${names}`);
+          $('log').append(li);
+        });
+      }
+    }
+    customElements.define('profile-card', ProfileCard);
+
+    const cards = document.querySelectorAll('profile-card');
+    $('compact').addEventListener('change', () => cards.forEach((card) => card.toggleAttribute('compact', $('compact').checked)));
+    $('accent').addEventListener('input', () => $('cards').style.setProperty('--card-accent', $('accent').value));
+    $('page-css').addEventListener('change', () => { $('page-rules').media = $('page-css').checked ? 'all' : 'not all'; });
+    $('part-css').addEventListener('change', () => { $('part-rules').media = $('part-css').checked ? 'all' : 'not all'; });
+    let actions = 0;
+    $('add-action').addEventListener('click', () => {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: `Action ${++actions}` });
+      button.slot = 'actions';                         // assigned to <slot name="actions">
+      $('grace').append(button);
+    });
+  </script>
+</body>
+</html>
