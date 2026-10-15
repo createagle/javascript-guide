@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 13-1 · Start: Make It Iterable</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 13-1">
+    <script type="text/plain" class="code">
+      // Make playlist iterable: for…of, spread and destructuring
+      // should produce the song titles in order.
+      const playlist = {
+        name: 'Road trip',
+        songs: [
+          { title: 'Africa', seconds: 295 },
+          { title: 'Go Your Own Way', seconds: 218 },
+          { title: 'Dreams', seconds: 257 },
+        ],
+      };
+
+      for (const title of playlist) {
+        console.log(title);
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      test('spreads into the titles', () => assert.deepEqual([...playlist], ['Africa', 'Go Your Own Way', 'Dreams']));
+      test('can be iterated more than once', () => {
+        [...playlist];
+        assert.equal([...playlist].length, 3);
+      });
+      test('works with destructuring', () => {
+        const [first, second] = playlist;
+        assert.equal(first, 'Africa');
+        assert.equal(second, 'Go Your Own Way');
+      });
+      test('follows changes to songs', () => {
+        playlist.songs.push({ title: 'Everywhere', seconds: 226 });
+        try {
+          assert.equal([...playlist].at(-1), 'Everywhere');
+        } finally {
+          playlist.songs.pop();
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>

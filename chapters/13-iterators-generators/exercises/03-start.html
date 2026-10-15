@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 13-3 · Start: Read Only What You Need</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 13-3">
+    <script type="text/plain" class="code">
+      // readings() is an endless stream of daily temperatures.
+      // firstHotDays(stream, limit) returns the day numbers of the first `limit`
+      // readings above 30 degrees, and must not read more readings than it needs.
+      // Use the iterator helpers: filter, map, take, toArray.
+      let produced = 0;
+      function* readings() {
+        const temps = [28, 31, 25, 33, 35, 29, 30, 36];
+        for (let day = 1; ; day++) {
+          produced++;
+          yield { day, temp: temps[(day - 1) % temps.length] };
+        }
+      }
+
+      function firstHotDays(stream, limit) {
+        // Reads 1000 readings "to be safe", then filters
+        const all = [];
+        for (const reading of stream) {
+          all.push(reading);
+          if (all.length === 1000) break;
+        }
+        return all.filter((r) => r.temp > 30).slice(0, limit).map((r) => r.day);
+      }
+
+      console.log(firstHotDays(readings(), 3), 'readings used:', produced);
+    </script>
+    <script type="text/plain" class="tests">
+      test('finds the first three hot days', () => assert.deepEqual(firstHotDays(readings(), 3), [2, 4, 5]));
+      test('reads only five readings for three hot days', () => {
+        produced = 0;
+        firstHotDays(readings(), 3);
+        assert.equal(produced, 5);
+      });
+      test('works for a longer run', () => {
+        produced = 0;
+        assert.deepEqual(firstHotDays(readings(), 5), [2, 4, 5, 8, 10]);
+        assert.equal(produced, 10);
+      });
+      test('limit 0 reads nothing', () => {
+        produced = 0;
+        assert.deepEqual(firstHotDays(readings(), 0), []);
+        assert.equal(produced, 0);
+      });
+    </script>
+  </div>
+</body>
+</html>

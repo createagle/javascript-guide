@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>13-2 A Hand-Written Iterable</title>
+  <style>
+    .stage { width: min(980px, 100%); }
+    .stage > .left { flex: 1 1 380px; }
+    .stage > .right { flex: 1 1 380px; }
+    .left pre.code { font-size: 12px; white-space: pre; word-break: normal; }
+    .num { width: 5em; }
+    .consumers { display: flex; flex-wrap: wrap; gap: 6px; }
+    .consumers .btn { font-family: var(--mono); font-size: 12px; }
+    .consumers .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    .result-label { margin-top: 14px; }
+    .result { margin: 0 0 12px; font: 600 15px var(--mono); overflow-wrap: anywhere; }
+    .result.bad { color: var(--bad); }
+    .calls { margin: 0; padding-left: 26px; font: 12px/1.6 var(--mono); max-height: 300px; overflow: auto; }
+    .calls .early { color: var(--warn); font-weight: 700; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <span class="control">new Range(</span>
+    <label class="control">from <input id="from" type="number" value="1" class="btn num"></label>
+    <label class="control">to <input id="to" type="number" value="5" class="btn num"></label>
+    <label class="control">step <input id="step" type="number" value="1" min="1" class="btn num"></label>
+    <span class="control">)</span>
+  </div>
+  <div class="stage">
+    <div class="panel left">
+      <p class="label">The class</p>
+      <pre class="code" id="source"></pre>
+    </div>
+    <div class="panel right">
+      <p class="label">Consume it</p>
+      <div class="consumers" id="consumers"></div>
+      <p class="label result-label">Result</p>
+      <p class="result" id="result" aria-live="polite">Pick a way to consume the range.</p>
+      <p class="label">Protocol calls</p>
+      <ol class="calls" id="calls"></ol>
+    </div>
+  </div>
+  <script>
+    'use strict';
+    let report = () => {};
+
+    class Range {
+      constructor(from, to, step = 1) {
+        this.from = from;
+        this.to = to;
+        this.step = step;
+      }
+
+      [Symbol.iterator]() {
+        report('range[Symbol.iterator]() → a new iterator');
+        let current = this.from;
+        const { to, step } = this;
+        return {
+          next() {
+            if (current <= to) {
+              const value = current;
+              current += step;
+              report(`next() → { value: ${value}, done: false }`);
+              return { value, done: false };
+            }
+            report('next() → { value: undefined, done: true }');
+            return { value: undefined, done: true };
+          },
+          return() {
+            report('return() → the consumer stopped early');
+            return { value: undefined, done: true };
+          },
+        };
+      }
+    }
+
+    const CONSUMERS = [
+      ['for (const n of range) out.push(n)', (range) => { const out = []; for (const n of range) out.push(n); return out; }],
+      ['[...range]', (range) => [...range]],
+      ['const [first, second] = range', (range) => { const [first, second] = range; return { first, second }; }],
+      ['for…of with break when n > 2', (range) => { const out = []; for (const n of range) { if (n > 2) break; out.push(n); } return out; }],
+      ['Array.from(range, (n) => n * 10)', (range) => Array.from(range, (n) => n * 10)],
+      ['new Set(range)', (range) => new Set(range)],
+      ['Math.max(...range)', (range) => Math.max(...range)],
+      ['range.next()', (range) => range.next()],
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    // toString() keeps the indentation the class had in this file: remove it from every line after the first
+    function dedent(source) {
+      const [first, ...rest] = source.split('\n');
+      const indent = Math.min(...rest.filter((line) => line.trim()).map((line) => line.match(/^ */)[0].length));
+      return [first, ...rest.map((line) => line.slice(indent))].join('\n');
+    }
+    $('source').textContent = dedent(Range.toString()).replace(/^\s*report\(.*\);\n/gm, '');
+
+    function show(value) {
+      if (value instanceof Set) return `Set(${value.size}) { ${[...value].join(', ')} }`;
+      return JSON.stringify(value);
+    }
+    let last = null;
+    function run(index) {
+      last = index;
+      const [label, consume] = CONSUMERS[index];
+      for (const b of $('consumers').children) b.setAttribute('aria-pressed', String(b.dataset.index === String(index)));
+      const calls = [];
+      report = (text) => calls.push(text);
+      const range = new Range(Number($('from').value), Number($('to').value), Math.max(1, Number($('step').value) || 1));
+      try {
+        $('result').className = 'result';
+        $('result').textContent = show(consume(range));
+      } catch (error) {
+        $('result').className = 'result bad';
+        $('result').textContent = `${error.name}: ${error.message}`;
+        calls.push('(no protocol calls: a Range is iterable, but it is not an iterator)');
+      }
+      report = () => {};
+      $('calls').replaceChildren(...calls.map((text) => Object.assign(document.createElement('li'), { textContent: text, className: text.startsWith('return') ? 'early' : '' })));
+    }
+    CONSUMERS.forEach(([label], index) => {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: label });
+      button.dataset.index = index;
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', () => run(index));
+      $('consumers').append(button);
+    });
+    for (const id of ['from', 'to', 'step']) $(id).addEventListener('input', () => { if (last !== null) run(last); });
+    run(0);
+  </script>
+</body>
+</html>

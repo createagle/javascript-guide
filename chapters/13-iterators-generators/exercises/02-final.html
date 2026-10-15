@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 13-2 · Final: A chunk() Generator</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 13-2">
+    <script type="text/plain" class="code">
+      // chunk(iterable, size) yields arrays of `size` items; the last one may be shorter.
+      // It must work on any iterable, including endless ones, so it cannot
+      // turn its input into an array first.
+      function* chunk(iterable, size) {
+        let batch = [];
+        for (const item of iterable) {
+          batch.push(item);
+          if (batch.length === size) {
+            yield batch;
+            batch = [];
+          }
+        }
+        if (batch.length > 0) yield batch;
+      }
+
+      console.log([...chunk([1, 2, 3, 4, 5], 2)]);
+    </script>
+    <script type="text/plain" class="tests">
+      test('splits an array', () => assert.deepEqual([...chunk([1, 2, 3, 4, 5], 2)], [[1, 2], [3, 4], [5]]));
+      test('exact multiples have no empty chunk', () => assert.deepEqual([...chunk([1, 2, 3, 4], 2)], [[1, 2], [3, 4]]));
+      test('works on strings', () => assert.deepEqual([...chunk('abcde', 3)], [['a', 'b', 'c'], ['d', 'e']]));
+      test('empty input gives nothing', () => assert.deepEqual([...chunk([], 3)], []));
+      test('reads its input lazily', () => {
+        let pulled = 0;
+        function* counted() {
+          for (let n = 1; n <= 1000; n++) {
+            pulled++;
+            yield n;
+          }
+        }
+        const chunks = chunk(counted(), 3);
+        assert.deepEqual(chunks.next().value, [1, 2, 3]);
+        assert.equal(pulled, 3, `read ${pulled} items to make the first chunk of 3`);
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>13-1 Lazy Infinite Sequences</title>
+  <style>
+    .stage { width: min(960px, 100%); }
+    .stage > * { flex: 1 1 360px; }
+    .left pre.code { white-space: pre; word-break: normal; }
+    .support { font-size: 12px; color: var(--muted); margin: 8px 0 12px; }
+    .stats { display: flex; gap: 12px; margin-bottom: 12px; }
+    .stats > div { flex: 1; display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--surface); font-size: 12px; color: var(--muted); }
+    .stats .num { font: 700 22px var(--mono); color: var(--fg); }
+    .results { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; min-height: 1.6em; }
+    .results code { padding: 2px 8px; border-radius: 6px; background: color-mix(in oklch, var(--accent) 14%, var(--bg)); font-weight: 600; }
+    .results .empty { color: var(--muted); font-style: italic; font-size: 13px; }
+    .trace { margin: 0; padding: 0; list-style: none; max-height: 430px; overflow: auto; font: 12px/1.5 var(--mono); }
+    .trace li { padding: 2px 8px; border-left: 3px solid transparent; }
+    .trace .source { color: var(--muted); }
+    .trace .drop { color: var(--muted); text-decoration: line-through; }
+    .trace .pass, .trace .map { color: var(--info); }
+    .trace .ask { margin-top: 6px; border-left-color: var(--accent); font-weight: 700; }
+    .trace .out { color: var(--good); font-weight: 700; }
+    .trace .end { color: var(--warn); }
+    .trace .note { color: var(--muted); font-style: italic; font-family: system-ui, sans-serif; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="preset">Pipeline</label>
+    <select id="preset" class="btn"></select>
+    <button class="btn btn-primary" id="pull" type="button">Pull one value: next()</button>
+    <button class="btn" id="all" type="button">Pull the rest: toArray()</button>
+    <button class="btn" id="reset" type="button">Reset</button>
+  </div>
+  <div class="stage">
+    <div class="panel left">
+      <p class="label">Code</p>
+      <pre class="code" id="code"></pre>
+      <p class="support" id="support"></p>
+      <div class="stats">
+        <div><span class="num" id="produced">0</span><span>values made by the source</span></div>
+        <div><span class="num" id="returned">0</span><span>values out of the pipeline</span></div>
+      </div>
+      <p class="label">Results</p>
+      <p class="results" id="results"><span class="empty">nothing pulled yet</span></p>
+    </div>
+    <div class="panel right">
+      <p class="label">What happened, in order</p>
+      <ol class="trace" id="trace" aria-live="polite"></ol>
+    </div>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    let log = () => {};
+
+    // Fallbacks for browsers without the built-in helpers (Safari before 18.4) or Iterator.concat (2026)
+    const hasHelpers = typeof Iterator === 'function' && typeof Iterator.prototype.map === 'function';
+    const hasConcat = typeof Iterator === 'function' && typeof Iterator.concat === 'function';
+    function* concatFallback(...iterables) {
+      for (const iterable of iterables) yield* iterable;
+    }
+    const concat = hasConcat ? Iterator.concat.bind(Iterator) : concatFallback;
+    // A tiny wrapper with the same method names, used only when the built-ins are missing
+    function wrap(iterator) {
+      return {
+        filter(fn) { return wrap((function* () { for (const v of iterator) if (fn(v)) yield v; })()); },
+        map(fn) { return wrap((function* () { for (const v of iterator) yield fn(v); })()); },
+        take(n) { return wrap((function* () { if (n <= 0) return; for (const v of iterator) { yield v; if (--n <= 0) return; } })()); },
+        next() { return iterator.next(); },
+        [Symbol.iterator]() { return this; },
+      };
+    }
+    const lift = (iterator) => (hasHelpers ? iterator : wrap(iterator));
+
+    // Sources: each logs every value it produces
+    function* naturals(start = 1) {
+      for (let n = start; ; n++) {
+        log('source', `naturals() yields ${n}`);
+        yield n;
+      }
+    }
+    function* fibonacci() {
+      let [a, b] = [0, 1];
+      while (true) {
+        log('source', `fibonacci() yields ${a}`);
+        yield a;
+        [a, b] = [b, a + b];
+      }
+    }
+    function* countdown(from) {
+      for (let n = from; n > 0; n--) {
+        log('source', `countdown() yields ${n}`);
+        yield n;
+      }
+    }
+    const isPrime = (n) => {
+      if (n < 2) return false;
+      for (let d = 2; d * d <= n; d++) if (n % d === 0) return false;
+      return true;
+    };
+    // Callbacks that report what they did
+    const keep = (label, test) => (n) => { const ok = test(n); log(ok ? 'pass' : 'drop', `filter(${label}) ${ok ? 'keeps' : 'drops'} ${n}`); return ok; };
+    const change = (label, fn) => (n) => { const out = fn(n); log('map', `map(${label}) turns ${n} into ${out}`); return out; };
+
+    const PRESETS = [
+      { label: 'Prime numbers', take: 8,
+        code: 'naturals(2)\n  .filter(isPrime)\n  .take(8)',
+        build: () => lift(naturals(2)).filter(keep('isPrime', isPrime)).take(8) },
+      { label: 'Squares of odd numbers', take: 6,
+        code: 'naturals()\n  .filter((n) => n % 2 === 1)\n  .map((n) => n * n)\n  .take(6)',
+        build: () => lift(naturals()).filter(keep('odd', (n) => n % 2 === 1)).map(change('n * n', (n) => n * n)).take(6) },
+      { label: 'Even Fibonacci numbers', take: 6,
+        code: 'fibonacci()\n  .filter((n) => n % 2 === 0)\n  .take(6)',
+        build: () => lift(fibonacci()).filter(keep('even', (n) => n % 2 === 0)).take(6) },
+      { label: 'Joined sources: Iterator.concat()', take: 6,
+        code: 'Iterator.concat(countdown(3), naturals(100))\n  .take(6)',
+        build: () => lift(concat(countdown(3), naturals(100))).take(6) },
+    ];
+    PRESETS.forEach((p, i) => $('preset').add(new Option(p.label, i)));
+
+    let pipeline, produced, results, done;
+    function addLine(kind, text) {
+      const li = Object.assign(document.createElement('li'), { className: kind, textContent: text });
+      $('trace').append(li);
+      $('trace').scrollTop = $('trace').scrollHeight;
+    }
+    log = (kind, text) => { if (kind === 'source') produced++; addLine(kind, text); };
+
+    function reset() {
+      const preset = PRESETS[$('preset').value];
+      $('code').textContent = preset.code;
+      $('support').textContent = !hasHelpers
+        ? 'This browser has no built-in iterator helpers yet: the page uses small generator versions of filter, map and take.'
+        : preset.code.includes('concat') && !hasConcat
+          ? 'This browser has no Iterator.concat yet: the page uses the generator fallback from the chapter.'
+          : 'Running on the browser’s built-in iterator helpers.';
+      $('trace').replaceChildren();
+      produced = 0;
+      results = [];
+      done = false;
+      pipeline = preset.build();   // building the pipeline runs nothing yet
+      addLine('note', 'Pipeline built. Nothing has run: every stage waits to be asked for a value.');
+      update();
+    }
+    function pull() {
+      if (done) return;
+      addLine('ask', `next() #${results.length + 1}`);
+      const { value, done: finished } = pipeline.next();
+      if (finished) {
+        done = true;
+        addLine('end', 'take() has handed out all its values: { done: true }. The source is closed.');
+      } else {
+        results.push(value);
+        addLine('out', `→ ${value}`);
+      }
+      update();
+    }
+    function update() {
+      $('produced').textContent = produced;
+      $('returned').textContent = results.length;
+      $('results').replaceChildren(...(results.length ? results.map((v) => Object.assign(document.createElement('code'), { textContent: v })) : [Object.assign(document.createElement('span'), { className: 'empty', textContent: 'nothing pulled yet' })]));
+      $('pull').disabled = $('all').disabled = done;
+    }
+
+    $('preset').addEventListener('change', reset);
+    $('reset').addEventListener('click', reset);
+    $('pull').addEventListener('click', pull);
+    $('all').addEventListener('click', () => { while (!done) pull(); });
+    reset();
+  </script>
+</body>
+</html>
