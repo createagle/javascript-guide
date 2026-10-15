@@ -63,7 +63,8 @@
       const days = Math.round((date - Date.now()) / 86_400_000);
       const list = [
         ['Number', `new Intl.NumberFormat('${locale}').format(n)`, () => new Intl.NumberFormat(locale).format(n)],
-        ['Currency', `new Intl.NumberFormat('${locale}', { style: 'currency', currency: '${currency}' })`, () => new Intl.NumberFormat(locale, { style: 'currency', currency }).format(n)],
+        ['Currency', `new Intl.NumberFormat('${locale}', { style: 'currency', currency: '${currency}' })`,
+          () => new Intl.NumberFormat(locale, { style: 'currency', currency }).format(n)],
         ['Compact', `{ notation: 'compact' }`, () => new Intl.NumberFormat(locale, { notation: 'compact' }).format(n)],
         ['Percent', `{ style: 'percent', maximumFractionDigits: 1 }  // n / 1e7`, () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(n / 1e7)],
         ['Unit', `{ style: 'unit', unit: 'kilometer-per-hour' }  // 88`, () => new Intl.NumberFormat(locale, { style: 'unit', unit: 'kilometer-per-hour' }).format(88)],
