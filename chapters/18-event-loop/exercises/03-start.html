@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 18-3 · Start: Batch Updates in a Microtask</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 18-3">
+    <script type="text/plain" class="code">
+      // createBatcher(flush) returns schedule(item). Items scheduled during the same synchronous run
+      // are collected and passed to flush(items) together, once, in a microtask,
+      // so ten state changes cause one re-render, not ten.
+      function createBatcher(flush) {
+        return function schedule(item) {
+          flush([item]);
+        };
+      }
+
+      const schedule = createBatcher((items) => console.log('render with', items));
+      schedule('a');
+      schedule('b');
+      schedule('c');
+      console.log('scheduled three updates');
+    </script>
+    <script type="text/plain" class="tests">
+      function setup() {
+        const calls = [];
+        return { calls, schedule: createBatcher((items) => calls.push(items)) };
+      }
+      test('does not flush synchronously', () => {
+        const { calls, schedule } = setup();
+        schedule(1);
+        assert.equal(calls.length, 0);
+      });
+      test('one flush for many items', async () => {
+        const { calls, schedule } = setup();
+        schedule(1);
+        schedule(2);
+        schedule(3);
+        await null;
+        assert.deepEqual(calls, [[1, 2, 3]]);
+      });
+      test('flushes before the next task', async () => {
+        const { calls, schedule } = setup();
+        let seenByTimer;
+        setTimeout(() => { seenByTimer = calls.length; }, 0);
+        schedule('x');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        assert.equal(seenByTimer, 1);
+      });
+      test('a new batch after a flush', async () => {
+        const { calls, schedule } = setup();
+        schedule(1);
+        await null;
+        schedule(2);
+        await null;
+        assert.deepEqual(calls, [[1], [2]]);
+      });
+    </script>
+  </div>
+</body>
+</html>

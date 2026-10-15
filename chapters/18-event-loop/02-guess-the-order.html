@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>18-2 Guess the Output Order</title>
+  <style>
+    .stage { width: min(900px, 100%); }
+    .stage > * { flex: 1 1 340px; }
+    .stage pre.code { white-space: pre; word-break: normal; font-size: 12.5px; }
+    .choices { display: flex; gap: 8px; flex-wrap: wrap; }
+    .letter { font: 700 16px var(--mono); min-width: 44px; justify-content: center; }
+    .guess, .actual { list-style: none; margin: 12px 0 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; min-height: 34px; }
+    .guess li, .actual li { font: 700 16px var(--mono); padding: 4px 12px; border-radius: 6px; background: var(--surface); }
+    .actual .match { background: color-mix(in oklch, var(--good) 22%, var(--bg)); }
+    .actual .miss { background: color-mix(in oklch, var(--bad) 22%, var(--bg)); }
+    .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .verdict { margin: 14px 0 0; font-weight: 700; }
+    .why { margin: 10px 0 0; font-size: 14px; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="puzzle">Puzzle</label>
+    <select id="puzzle" class="btn"></select>
+  </div>
+  <div class="stage">
+    <div class="panel">
+      <p class="label">Code</p>
+      <pre class="code" id="code"></pre>
+    </div>
+    <div class="panel answer">
+      <p class="label">Click the lines in the order you think they are printed</p>
+      <div class="choices" id="choices"></div>
+      <ol class="guess" id="guess"></ol>
+      <div class="row">
+        <button class="btn btn-primary" id="check" type="button" disabled>Run it and check</button>
+        <button class="btn" id="clear" type="button">Start over</button>
+      </div>
+      <p class="verdict" id="verdict" aria-live="polite"></p>
+      <ol class="actual" id="actual"></ol>
+      <p class="why" id="why"></p>
+    </div>
+  </div>
+  <script type="module">
+    // Each puzzle really runs: run(log) schedules its work, and the page collects the log after 200 ms
+    const PUZZLES = [
+      {
+        name: 'Timer, promise, sync',
+        code: "console.log('A');\nsetTimeout(() => console.log('B'), 0);\nPromise.resolve().then(() => console.log('C'));\nconsole.log('D');",
+        run(log) { log('A'); setTimeout(() => log('B'), 0); Promise.resolve().then(() => log('C')); log('D'); },
+        why: 'Sync code first (A, D), then microtasks (C), then the next task (B).',
+      },
+      {
+        name: 'Inside an async function',
+        code: "async function run() {\n  console.log('A');\n  await null;\n  console.log('B');\n}\nrun();\nconsole.log('C');",
+        run(log) { (async () => { log('A'); await null; log('B'); })(); log('C'); },
+        why: 'An async function runs synchronously until its first await, so A comes before C. Everything after the await is a microtask, so B comes last.',
+      },
+      {
+        name: 'The promise executor',
+        code: "new Promise((resolve) => {\n  console.log('A');\n  resolve();\n}).then(() => console.log('B'));\nconsole.log('C');",
+        run(log) { new Promise((resolve) => { log('A'); resolve(); }).then(() => log('B')); log('C'); },
+        why: 'The function passed to new Promise runs immediately and synchronously. Only then callbacks are delayed.',
+      },
+      {
+        name: 'Microtasks between timers',
+        code: "setTimeout(() => {\n  console.log('A');\n  Promise.resolve().then(() => console.log('B'));\n}, 0);\nsetTimeout(() => console.log('C'), 0);",
+        run(log) { setTimeout(() => { log('A'); Promise.resolve().then(() => log('B')); }, 0); setTimeout(() => log('C'), 0); },
+        why: 'After each task, all microtasks run before the next task: B squeezes in between the two timers.',
+      },
+      {
+        name: 'queueMicrotask and then',
+        code: "setTimeout(() => console.log('A'), 0);\nqueueMicrotask(() => console.log('B'));\nPromise.resolve().then(() => console.log('C'));\nqueueMicrotask(() => console.log('D'));",
+        run(log) { setTimeout(() => log('A'), 0); queueMicrotask(() => log('B')); Promise.resolve().then(() => log('C')); queueMicrotask(() => log('D')); },
+        why: 'queueMicrotask and then share one queue, first come first served: B, C, D. The timer waits for all of them.',
+      },
+      {
+        name: 'Returning a promise from then (hard)',
+        code: "Promise.resolve()\n  .then(() => {\n    console.log('A');\n    return Promise.resolve();\n  })\n  .then(() => console.log('B'));\nPromise.resolve()\n  .then(() => console.log('C'))\n  .then(() => console.log('D'))\n  .then(() => console.log('E'))\n  .then(() => console.log('F'));",
+        run(log) {
+          Promise.resolve().then(() => { log('A'); return Promise.resolve(); }).then(() => log('B'));
+          Promise.resolve().then(() => log('C')).then(() => log('D')).then(() => log('E')).then(() => log('F'));
+        },
+        why: 'Each then step costs one microtask turn, so the two chains take turns. Returning a promise from a then callback costs two extra turns while JavaScript unwraps it, so B falls behind E.',
+      },
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    PUZZLES.forEach((p, i) => $('puzzle').add(new Option(`${i + 1}. ${p.name}`, i)));
+    let guess = [];
+    let lines = [];
+
+    function shuffle(array) {
+      const a = [...array];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+    function load() {
+      const p = PUZZLES[$('puzzle').value];
+      $('code').textContent = p.code;
+      lines = [...p.code.matchAll(/console\.log\('(\w)'\)/g)].map((m) => m[1]);
+      guess = [];
+      $('verdict').textContent = '';
+      $('actual').replaceChildren();
+      $('why').textContent = '';
+      $('choices').replaceChildren(...shuffle(lines).map((letter) => {
+        const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn letter', textContent: letter });
+        button.addEventListener('click', () => {
+          guess.push(letter);
+          button.disabled = true;
+          renderGuess();
+        });
+        return button;
+      }));
+      renderGuess();
+    }
+    function renderGuess() {
+      $('guess').replaceChildren(...guess.map((g) => Object.assign(document.createElement('li'), { textContent: g })));
+      $('check').disabled = guess.length !== lines.length;
+    }
+    async function check() {
+      const p = PUZZLES[$('puzzle').value];
+      const actual = [];
+      p.run((x) => actual.push(x));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const right = actual.join() === guess.join();
+      $('verdict').textContent = right ? 'Correct!' : 'Not quite. Here is what really happened:';
+      $('verdict').className = 'verdict ' + (right ? 'good' : 'bad');
+      $('actual').replaceChildren(...actual.map((a, n) => Object.assign(document.createElement('li'), { textContent: a, className: guess[n] === a ? 'match' : 'miss' })));
+      $('why').textContent = p.why;
+    }
+    $('puzzle').addEventListener('change', load);
+    $('clear').addEventListener('click', load);
+    $('check').addEventListener('click', check);
+    load();
+  </script>
+</body>
+</html>

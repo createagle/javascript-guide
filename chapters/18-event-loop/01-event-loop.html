@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>18-1 The Event Loop, Step by Step</title>
+  <style>
+    .layout { width: min(980px, 100%); display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "code code stack" "apis micro tasks" "out out note"; }
+    @media (width < 760px) { .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "code" "stack" "apis" "micro" "tasks" "out" "note"; } }
+    .code-list { grid-area: code; margin: 0; padding: 12px 12px 12px 36px; font: 13px/1.5 var(--mono); white-space: pre; overflow-x: auto; }
+    .code-list li { padding: 2px 6px; border-radius: 6px; }
+    .code-list li.current { background: color-mix(in oklch, var(--accent) 18%, transparent); font-weight: 600; }
+    .stack { grid-area: stack; } .apis { grid-area: apis; } .micro { grid-area: micro; } .tasks { grid-area: tasks; } .out { grid-area: out; }
+    .note { grid-area: note; margin: 0; font-size: 14px; min-height: 5em; }
+    .box h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .box ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 12px var(--mono); }
+    .box li { padding: 4px 8px; border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+    .box li.empty { background: none; color: var(--muted); font-style: italic; font-family: system-ui, sans-serif; }
+    .box li.new { background: color-mix(in oklch, var(--accent) 22%, var(--surface)); font-weight: 700; }
+    .micro li:not(.empty) { border-left: 3px solid var(--good); }
+    .tasks li:not(.empty) { border-left: 3px solid var(--warn); }
+    .out li:not(.empty) { background: none; border-bottom: 1px solid var(--border); border-radius: 0; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="program">Program</label>
+    <select id="program" class="btn"></select>
+    <button class="btn" id="prev" type="button">Back</button>
+    <output id="counter"></output>
+    <button class="btn btn-primary" id="next" type="button">Next step</button>
+  </div>
+  <div class="layout">
+    <ol class="panel code-list" id="code" aria-label="Code"></ol>
+    <section class="panel box stack"><h2>Call stack</h2><ol id="stack"></ol></section>
+    <section class="panel box apis"><h2>Waiting in the browser</h2><ol id="apis"></ol></section>
+    <section class="panel box micro"><h2>Microtask queue</h2><ol id="micro"></ol></section>
+    <section class="panel box tasks"><h2>Task queue</h2><ol id="tasks"></ol></section>
+    <section class="panel box out"><h2>Console</h2><ol id="out"></ol></section>
+    <p class="panel note" id="note" aria-live="polite"></p>
+  </div>
+  <script>
+    'use strict';
+    // Each step lists operations; the state at step i is every operation of steps 0..i replayed in order.
+    //   ['push', box, label]  add to the end      ['pop', box]   remove the last (the stack)
+    //   ['shift', box]        remove the first    ['move', from, to, label]  take label out of from, add to to
+    //   ['log', text]         print to the console
+    const PROGRAMS = {
+      'setTimeout vs Promise': {
+        code: [
+          "console.log('script start');",
+          "setTimeout(() => console.log('timeout'), 0);",
+          "Promise.resolve().then(() => console.log('promise'));",
+          "console.log('script end');",
+        ],
+        steps: [
+          { line: -1, ops: [['push', 'stack', 'script']], note: 'The whole script is one task. It goes on the call stack and runs to the end before anything else can happen.' },
+          { line: 0, ops: [['log', 'script start']], note: 'Synchronous code runs right away.' },
+          { line: 1, ops: [['push', 'apis', 'timer 0 ms → timeout callback']], note: 'setTimeout hands the callback to the browser’s timer. Even with 0 ms it never runs now: the timer adds a task when it fires.' },
+          { line: 1, ops: [['move', 'apis', 'tasks', 'timer 0 ms → timeout callback']], note: 'The timer fires (almost at once), so its callback joins the task queue. It still has to wait: the stack is busy.' },
+          { line: 2, ops: [['push', 'micro', 'then → promise callback']], note: 'The promise is already resolved, so its then callback goes straight into the microtask queue.' },
+          { line: 3, ops: [['log', 'script end']], note: 'More synchronous code.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'The script task is finished and the stack is empty. Now the event loop empties the WHOLE microtask queue before taking another task.' },
+          { line: 2, ops: [['shift', 'micro'], ['push', 'stack', 'promise callback'], ['log', 'promise']], note: 'The microtask runs: “promise” is printed before “timeout”, although the timeout was scheduled first.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'The microtask queue is empty. The browser may now render a frame, then the loop takes the next task.' },
+          { line: 1, ops: [['shift', 'tasks'], ['push', 'stack', 'timeout callback'], ['log', 'timeout']], note: 'The timer callback finally runs, as a task of its own.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'Done. Order: script start, script end, promise, timeout.' },
+        ],
+      },
+      'async / await': {
+        code: [
+          'async function load() {',
+          "  console.log('load start');",
+          '  await null;',
+          "  console.log('load end');",
+          '}',
+          "console.log('A');",
+          'load();',
+          "console.log('B');",
+        ],
+        steps: [
+          { line: -1, ops: [['push', 'stack', 'script']], note: 'The script starts as a task.' },
+          { line: 5, ops: [['log', 'A']], note: 'Synchronous.' },
+          { line: 6, ops: [['push', 'stack', 'load()']], note: 'Calling an async function runs its body synchronously, up to the first await.' },
+          { line: 1, ops: [['log', 'load start']], note: '“load start” is printed before “B”.' },
+          { line: 2, ops: [['pop', 'stack'], ['push', 'micro', 'resume load() after await']], note: 'await pauses load(). The rest of the function is scheduled as a microtask, and load() returns a pending promise to the caller.' },
+          { line: 7, ops: [['log', 'B']], note: 'The caller carries on: “B” comes before “load end”.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'The script is finished. Time for microtasks.' },
+          { line: 3, ops: [['shift', 'micro'], ['push', 'stack', 'load() (resumed)'], ['log', 'load end']], note: 'load() continues where it paused.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'Done. Order: A, load start, B, load end.' },
+        ],
+      },
+      'Microtasks between tasks': {
+        code: [
+          'setTimeout(() => {',
+          "  console.log('task 1');",
+          "  Promise.resolve().then(() => console.log('micro from task 1'));",
+          '}, 0);',
+          "setTimeout(() => console.log('task 2'), 0);",
+        ],
+        steps: [
+          { line: -1, ops: [['push', 'stack', 'script']], note: 'Two timers are about to be set.' },
+          { line: 0, ops: [['push', 'apis', 'timer → task 1']], note: 'First timer.' },
+          { line: 4, ops: [['push', 'apis', 'timer → task 2']], note: 'Second timer.' },
+          { line: -1, ops: [['pop', 'stack'], ['move', 'apis', 'tasks', 'timer → task 1'], ['move', 'apis', 'tasks', 'timer → task 2']], note: 'The script ends. Both timers fire and their callbacks wait in the task queue, in order.' },
+          { line: 1, ops: [['shift', 'tasks'], ['push', 'stack', 'task 1'], ['log', 'task 1']], note: 'The loop takes ONE task: the first timer callback.' },
+          { line: 2, ops: [['push', 'micro', 'then → micro from task 1']], note: 'Task 1 queues a microtask.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'Task 1 is finished. Before the next task, the loop empties the microtask queue.' },
+          { line: 2, ops: [['shift', 'micro'], ['push', 'stack', 'microtask'], ['log', 'micro from task 1']], note: 'The microtask runs before task 2, even though task 2 was waiting the whole time.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'Microtasks done. Next task.' },
+          { line: 4, ops: [['shift', 'tasks'], ['push', 'stack', 'task 2'], ['log', 'task 2']], note: 'Task 2 runs.' },
+          { line: -1, ops: [['pop', 'stack']], note: 'Done. One task, then all its microtasks, then the next task.' },
+        ],
+      },
+    };
+
+    const $ = (id) => document.getElementById(id);
+    for (const name of Object.keys(PROGRAMS)) $('program').add(new Option(name));
+    let i = 0;
+
+    function stateAt(steps, last) {
+      const s = { stack: [], apis: [], micro: [], tasks: [], out: [] };
+      let changed = new Set();
+      steps.slice(0, last + 1).forEach((step, n) => {
+        if (n === last) changed = new Set();
+        for (const [op, a, b, c] of step.ops) {
+          if (op === 'push') { s[a].push(b); if (n === last) changed.add(a); }
+          else if (op === 'pop') s[a].pop();
+          else if (op === 'shift') s[a].shift();
+          else if (op === 'move') { s[a].splice(s[a].indexOf(c), 1); s[b].push(c); if (n === last) changed.add(b); }
+          else if (op === 'log') { s.out.push(a); if (n === last) changed.add('out'); }
+        }
+      });
+      return { s, changed };
+    }
+
+    function fill(id, items, changed, reversed = false) {
+      const list = reversed ? [...items].reverse() : items;
+      $(id).replaceChildren(...(list.length ? list.map((text, n) => Object.assign(document.createElement('li'), {
+        textContent: text,
+        className: changed && (reversed ? n === 0 : n === list.length - 1) ? 'new' : '',
+      })) : [Object.assign(document.createElement('li'), { textContent: 'empty', className: 'empty' })]));
+    }
+
+    function render() {
+      const program = PROGRAMS[$('program').value];
+      const step = program.steps[i];
+      const { s, changed } = stateAt(program.steps, i);
+      $('code').replaceChildren(...program.code.map((t, n) => Object.assign(document.createElement('li'), { textContent: t, className: n === step.line ? 'current' : '' })));
+      fill('stack', s.stack, changed.has('stack'), true);   // top of the stack first
+      fill('apis', s.apis, changed.has('apis'));
+      fill('micro', s.micro, changed.has('micro'));
+      fill('tasks', s.tasks, changed.has('tasks'));
+      fill('out', s.out, changed.has('out'));
+      $('note').textContent = step.note;
+      $('counter').textContent = `Step ${i + 1} of ${program.steps.length}`;
+      $('prev').disabled = i === 0;
+      $('next').disabled = i === program.steps.length - 1;
+    }
+    $('next').addEventListener('click', () => { i++; render(); });
+    $('prev').addEventListener('click', () => { i--; render(); });
+    $('program').addEventListener('change', () => { i = 0; render(); });
+    render();
+  </script>
+</body>
+</html>

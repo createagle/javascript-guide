@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 18-1 · Start: Predict the Order</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 18-1">
+    <script type="text/plain" class="code">
+      // Without running it in your head too fast: in what order do the letters get logged?
+      // Fill in prediction with the seven letters. The tests run the code and compare.
+      function puzzle(log) {
+        log('A');
+        setTimeout(() => log('B'), 0);
+        Promise.resolve().then(() => log('C'));
+        queueMicrotask(() => log('D'));
+        (async () => {
+          log('E');
+          await null;
+          log('F');
+        })();
+        log('G');
+      }
+
+      const prediction = ['?', '?', '?', '?', '?', '?', '?'];
+    </script>
+    <script type="text/plain" class="tests">
+      async function actualOrder() {
+        const seen = [];
+        puzzle((x) => seen.push(x));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return seen;
+      }
+      test('the synchronous part', async () => assert.deepEqual(prediction.slice(0, 3), (await actualOrder()).slice(0, 3)));
+      test('the microtasks', async () => assert.deepEqual(prediction.slice(3, 6), (await actualOrder()).slice(3, 6)));
+      test('the task', async () => assert.equal(prediction[6], (await actualOrder())[6]));
+    </script>
+  </div>
+</body>
+</html>

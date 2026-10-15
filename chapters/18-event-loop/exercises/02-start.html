@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 18-2 · Start: Split a Long Task</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 18-2">
+    <script type="text/plain" class="code">
+      // processInChunks(items, handle, chunkSize) calls handle(item) for every item, in order,
+      // but only chunkSize items at a time: between chunks it gives the event loop a turn,
+      // so the page can still react to clicks. It returns a promise that resolves when all are done.
+      // Use scheduler.yield() where it exists, and setTimeout otherwise.
+      async function processInChunks(items, handle, chunkSize = 100) {
+        for (const item of items) handle(item);
+      }
+
+      const seen = [];
+      const done = processInChunks([1, 2, 3, 4, 5], (n) => seen.push(n), 2);
+      console.log('right after the call:', seen);
+      await done;
+      console.log('after await:', seen);
+    </script>
+    <script type="text/plain" class="tests">
+      const range = (n) => Array.from({ length: n }, (_, i) => i);
+      test('only the first chunk runs synchronously', () => {
+        const seen = [];
+        processInChunks(range(10), (n) => seen.push(n), 3);
+        assert.deepEqual(seen, [0, 1, 2]);
+      });
+      test('handles every item, in order', async () => {
+        const seen = [];
+        await processInChunks(range(250), (n) => seen.push(n), 100);
+        assert.deepEqual(seen, range(250));
+      });
+      test('yields to the event loop, not just to microtasks', async () => {
+        const seen = [];
+        const p = processInChunks(range(30), (n) => seen.push(n), 10);
+        for (let i = 0; i < 5; i++) await null;   // let a few microtask turns pass
+        assert.equal(seen.length, 10, 'more chunks ran before any other task could');
+        await p;
+      });
+    </script>
+  </div>
+</body>
+</html>
