@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 19-3 · Start: Write Promise.all Yourself</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 19-3">
+    <script type="text/plain" class="code">
+      // myAll(iterable) should behave like Promise.all:
+      // - fulfill with all values, in the same order as the input (not the order they finish in)
+      // - accept plain values as well as promises
+      // - fulfill with [] for an empty input
+      // - reject as soon as any of them rejects
+      // Promise.withResolvers() is a handy way to start.
+      function myAll(iterable) {
+        return new Promise((resolve, reject) => {
+          const results = [];
+          const items = [...iterable];
+          for (const item of items) {
+            Promise.resolve(item).then((value) => {
+              results.push(value);
+              if (results.length === items.length) resolve(results);
+            }, reject);
+          }
+        });
+      }
+
+      const after = (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+      console.log(await myAll([after(30, 'slow'), after(10, 'fast'), 'now']));
+    </script>
+    <script type="text/plain" class="tests">
+      const wait = (ms, value, fail) => new Promise((resolve, reject) => setTimeout(() => (fail ? reject(new Error(value)) : resolve(value)), ms));
+      test('keeps the input order', async () => assert.deepEqual(await myAll([wait(40, 'a'), wait(5, 'b'), wait(20, 'c')]), ['a', 'b', 'c']));
+      test('accepts plain values', async () => assert.deepEqual(await myAll([1, wait(5, 2), 3]), [1, 2, 3]));
+      test('an empty input fulfills with []', async () => {
+        const result = await Promise.race([myAll([]), wait(100, 'still pending')]);
+        assert.deepEqual(result, []);
+      });
+      test('rejects as soon as one rejects', async () => {
+        const start = Date.now();
+        await assert.rejects(myAll([wait(400, 'slow'), wait(10, 'broken', true)]), /broken/);
+        assert.ok(Date.now() - start < 200, 'it waited for the slow one');
+      });
+      test('returns a real promise', () => assert.ok(myAll([]) instanceof Promise));
+    </script>
+  </div>
+</body>
+</html>

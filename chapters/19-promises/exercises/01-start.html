@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 19-1 · Start: Promisify a Callback API</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 19-1">
+    <script type="text/plain" class="code">
+      // readSettings(name, callback) is an old-style API: it calls callback(error, value) when done.
+      // promisify(fn) should return a new function that takes the same arguments
+      // (without the callback) and returns a promise instead.
+      function readSettings(name, callback) {
+        setTimeout(() => {
+          if (name === 'missing') callback(new Error('No such file'));
+          else callback(null, { name, theme: 'dark' });
+        }, 20);
+      }
+
+      function promisify(fn) {
+        return fn;
+      }
+
+      const read = promisify(readSettings);
+      console.log(await read('app'));
+    </script>
+    <script type="text/plain" class="tests">
+      const readSettingsAsync = promisify(readSettings);
+      test('resolves with the value', async () => assert.deepEqual(await readSettingsAsync('app'), { name: 'app', theme: 'dark' }));
+      test('rejects with the error', async () => assert.rejects(readSettingsAsync('missing'), /No such file/));
+      test('returns a promise', () => {
+        const p = readSettingsAsync('app');
+        assert.ok(p instanceof Promise);
+        return p;
+      });
+      test('passes every argument', async () => {
+        const add = (a, b, callback) => callback(null, a + b);
+        assert.equal(await promisify(add)(2, 3), 5);
+      });
+    </script>
+  </div>
+</body>
+</html>

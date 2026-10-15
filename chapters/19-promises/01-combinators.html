@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>19-1 Promise Combinators on a Timeline</title>
+  <style>
+    .setup, .timeline { width: min(860px, 100%); }
+    .setup table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    .setup th, .setup td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    .setup thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .setup td:nth-child(2) { display: flex; align-items: center; gap: 8px; }
+    .setup input[type="range"] { flex: 1; min-width: 80px; }
+    .setup output { font: 12px var(--mono); min-width: 5.5em; }
+    .ops { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ops .btn { font-family: var(--mono); font-size: 12px; }
+    .ops .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    .timeline pre.code { font-size: 12px; margin-bottom: 12px; }
+    .tracks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .tracks li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) 9em; gap: 10px; align-items: center; font-size: 13px; }
+    .tracks .name { font: 600 13px var(--mono); overflow-wrap: anywhere; }
+    .track { position: relative; height: 18px; background: var(--surface); border-radius: 4px; }
+    .bar { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--muted); border-radius: 4px; }
+    .bar.ok { background: var(--good); }
+    .bar.fail { background: var(--bad); }
+    .combined { border-top: 1px dashed var(--border); padding-top: 8px; }
+    .marker { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--accent); }
+    .marker.ok { background: var(--good); }
+    .marker.fail { background: var(--bad); }
+    .state { font: 12px var(--mono); color: var(--muted); }
+    .result { margin: 14px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+    .result.good { color: var(--good); }
+    .result.bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel setup">
+    <table>
+      <thead><tr><th scope="col">Request</th><th scope="col">Takes</th><th scope="col">Then it</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="controls">
+    <span class="control">Combine with</span>
+    <span class="ops" id="ops" role="group" aria-label="Combinator"></span>
+    <button class="btn btn-primary" id="run" type="button">Run</button>
+  </div>
+  <div class="panel timeline">
+    <pre class="code" id="code"></pre>
+    <ol class="tracks" id="tracks"></ol>
+    <p class="result" id="result" aria-live="polite">Press Run.</p>
+  </div>
+  <script type="module">
+    const REQUESTS = [
+      { name: 'A', ms: 1200, ok: true },
+      { name: 'B', ms: 600, ok: true },
+      { name: 'C', ms: 1800, ok: false },
+      { name: 'D', ms: 900, ok: true },
+    ];
+    const COMBINATORS = {
+      all: 'Fulfills with every value, in order, when all fulfill. Rejects as soon as one rejects.',
+      allSettled: 'Waits for every promise and never rejects: you get a status for each one.',
+      race: 'Settles like whichever promise settles first, fulfilled or rejected.',
+      any: 'Fulfills with the first value. Rejects with an AggregateError only if every promise rejects.',
+    };
+    const $ = (id) => document.getElementById(id);
+    let combinator = 'all';
+
+    // The settings table: one row per request
+    REQUESTS.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<th scope="row">${r.name}</th>
+        <td><input type="range" min="100" max="3000" step="100" aria-label="${r.name} takes (ms)"><output></output></td>
+        <td><select class="btn" aria-label="${r.name} outcome"><option value="ok">fulfills</option><option value="fail">rejects</option></select></td>`;
+      const range = tr.querySelector('input');
+      const out = tr.querySelector('output');
+      const select = tr.querySelector('select');
+      range.value = r.ms;
+      out.textContent = `${r.ms} ms`;
+      select.value = r.ok ? 'ok' : 'fail';
+      range.addEventListener('input', () => { r.ms = range.valueAsNumber; out.textContent = `${r.ms} ms`; });
+      select.addEventListener('change', () => { r.ok = select.value === 'ok'; });
+      $('rows').append(tr);
+    });
+    for (const name of Object.keys(COMBINATORS)) {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: `Promise.${name}` });
+      button.addEventListener('click', () => { combinator = name; showCode(); });
+      $('ops').append(button);
+    }
+    function showCode() {
+      [...$('ops').children].forEach((b) => b.setAttribute('aria-pressed', String(b.textContent === `Promise.${combinator}`)));
+      $('code').textContent = `const result = await Promise.${combinator}([a, b, c, d]);\n// ${COMBINATORS[combinator]}`;
+    }
+
+    // A fake request: settles after ms with its name, or rejects with an Error
+    const request = (r) => new Promise((resolve, reject) => {
+      setTimeout(() => (r.ok ? resolve(r.name) : reject(new Error(`${r.name} failed`))), r.ms);
+    });
+
+    function describe(value) {
+      if (value instanceof AggregateError) return `AggregateError: ${value.errors.map((e) => e.message).join(', ')}`;
+      if (value instanceof Error) return `Error: ${value.message}`;
+      return JSON.stringify(value, (key, v) => (v instanceof Error ? `Error: ${v.message}` : v));
+    }
+
+    async function run() {
+      $('run').disabled = true;
+      const total = Math.max(...REQUESTS.map((r) => r.ms)) + 300;
+      const start = performance.now();
+      const tracks = REQUESTS.map((r) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="name">${r.name}</span><span class="track"><span class="bar"></span></span><span class="state">pending</span>`;
+        return { r, li, bar: li.querySelector('.bar'), state: li.querySelector('.state'), done: false };
+      });
+      const resultLi = document.createElement('li');
+      resultLi.className = 'combined';
+      resultLi.innerHTML = `<span class="name">${combinator}</span><span class="track"><span class="marker" hidden></span></span><span class="state">pending</span>`;
+      $('tracks').replaceChildren(...tracks.map((t) => t.li), resultLi);
+      $('result').textContent = '…';
+
+      const promises = tracks.map((t) => request(t.r).then(
+        (value) => { t.done = true; t.bar.classList.add('ok'); t.state.textContent = `fulfilled “${value}”`; return value; },
+        (error) => { t.done = true; t.bar.classList.add('fail'); t.state.textContent = 'rejected'; throw error; },
+      ));
+      // Each bar grows until its promise settles
+      let frame;
+      const tick = () => {
+        const elapsed = performance.now() - start;
+        for (const t of tracks) if (!t.done) t.bar.style.width = `${Math.min(elapsed, t.r.ms) / total * 100}%`;
+        frame = requestAnimationFrame(tick);
+      };
+      tick();
+
+      let outcome;
+      try {
+        outcome = { ok: true, value: await Promise[combinator](promises) };
+      } catch (error) {
+        outcome = { ok: false, value: error };
+      }
+      const at = performance.now() - start;
+      const marker = resultLi.querySelector('.marker');
+      marker.hidden = false;
+      marker.style.left = `${Math.min(at, total) / total * 100}%`;
+      marker.classList.add(outcome.ok ? 'ok' : 'fail');
+      resultLi.querySelector('.state').textContent = outcome.ok ? 'fulfilled' : 'rejected';
+      $('result').textContent = `After ${Math.round(at)} ms, Promise.${combinator} ${outcome.ok ? 'fulfilled with' : 'rejected with'} ${describe(outcome.value)}`;
+      $('result').className = 'result ' + (outcome.ok ? 'good' : 'bad');
+      // Keep drawing until every request has settled, then stop
+      await Promise.allSettled(promises);
+      cancelAnimationFrame(frame);
+      for (const t of tracks) t.bar.style.width = `${t.r.ms / total * 100}%`;
+      $('run').disabled = false;
+    }
+    $('run').addEventListener('click', run);
+    showCode();
+  </script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>19-2 Promise Chain Tracer</title>
+  <style>
+    .chain-panel { width: min(860px, 100%); }
+    .chain { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .chain li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+    .chain li label { grid-row: span 2; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+    .chain li code { font-size: 13px; overflow-wrap: anywhere; }
+    .chain .status { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+    .chain li.ran { border-color: var(--good); }
+    .chain li.ran .status { color: var(--good); }
+    .chain li.threw { border-color: var(--bad); }
+    .chain li.threw .status { color: var(--bad); }
+    .chain li.skipped { opacity: 0.55; border-style: dashed; }
+    .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .outcome { margin: 12px 0 0; font-weight: 600; }
+    .outcome.good { color: var(--good); }
+    .outcome.bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel chain-panel">
+    <p class="label">Tick a step to make it throw (or reject), then run the chain</p>
+    <ol class="chain" id="chain"></ol>
+    <div class="row">
+      <button class="btn btn-primary" id="run" type="button">Run the chain</button>
+      <button class="btn" id="none" type="button">Nothing fails</button>
+    </div>
+    <p class="outcome" id="outcome" aria-live="polite"></p>
+  </div>
+  <script type="module">
+    // The handlers do nothing real: each one reports what it received and what it returns
+    const STEPS = [
+      { code: 'fetchUser()', kind: 'start', result: { id: 7 } },
+      { code: '.then((user) => loadProfile(user))', kind: 'then', result: { name: 'Ada' } },
+      { code: '.then((profile) => render(profile))', kind: 'then', result: 'rendered' },
+      { code: '.catch((error) => showError(error))', kind: 'catch', result: 'error shown' },
+      { code: '.then((value) => track(value))', kind: 'then', result: undefined },
+      { code: '.finally(() => hideSpinner())', kind: 'finally', result: undefined },
+    ];
+    const $ = (id) => document.getElementById(id);
+    const rows = STEPS.map((step, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<label><input type="checkbox"> throws</label><code></code><span class="status">not run yet</span>`;
+      li.querySelector('code').textContent = step.code;
+      $('chain').append(li);
+      return { li, fail: li.querySelector('input'), status: li.querySelector('.status') };
+    });
+    const show = (v) => (v === undefined ? 'undefined' : v instanceof Error ? `Error(“${v.message}”)` : JSON.stringify(v));
+
+    async function run() {
+      const ran = new Map();
+      const handler = (i) => (input) => {
+        ran.set(i, input);
+        if (rows[i].fail.checked) throw new Error(`step ${i + 1} failed`);
+        return STEPS[i].result;
+      };
+      const chain = new Promise((resolve, reject) => {
+        ran.set(0, undefined);
+        setTimeout(() => (rows[0].fail.checked ? reject(new Error('step 1 failed')) : resolve(STEPS[0].result)), 150);
+      })
+        .then(handler(1))
+        .then(handler(2))
+        .catch(handler(3))
+        .then(handler(4))
+        .finally(() => handler(5)());
+
+      rows.forEach((row) => { row.status.textContent = 'running…'; row.li.className = ''; });
+      let outcome;
+      try {
+        outcome = `The chain fulfilled with ${show(await chain)}.`;
+        $('outcome').className = 'outcome good';
+      } catch (error) {
+        outcome = `The chain rejected with ${show(error)}: nothing caught it, so in a real page this would be an unhandledrejection.`;
+        $('outcome').className = 'outcome bad';
+      }
+      // Fill in what happened to every step
+      let state = 'fulfilled';
+      rows.forEach((row, i) => {
+        const step = STEPS[i];
+        if (ran.has(i)) {
+          const failed = row.fail.checked;
+          row.li.className = failed ? 'threw' : 'ran';
+          const got = i === 0 || step.kind === 'finally' ? '' : `received ${show(ran.get(i))}, `;
+          row.status.textContent = `ran: ${got}${failed ? `threw Error(“step ${i + 1} failed”)` : step.kind === 'finally' ? 'the result passes through unchanged' : `returned ${show(step.result)}`}`;
+          if (step.kind !== 'finally') state = failed ? 'rejected' : 'fulfilled';
+          else if (failed) state = 'rejected';
+        } else {
+          row.li.className = 'skipped';
+          row.status.textContent = `skipped: the promise was ${state}, and ${step.kind === 'catch' ? 'catch only runs on rejection' : 'then (with one function) only runs on fulfillment'}`;
+        }
+      });
+      $('outcome').textContent = outcome;
+    }
+    $('run').addEventListener('click', run);
+    $('none').addEventListener('click', () => { rows.forEach((r) => { r.fail.checked = false; }); run(); });
+    run();
+  </script>
+</body>
+</html>

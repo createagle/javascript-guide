@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 19-2 · Start: Give Up After a Timeout</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 19-2">
+    <script type="text/plain" class="code">
+      // withTimeout(promise, ms) settles like promise, unless ms milliseconds pass first:
+      // then it rejects with an Error whose name is 'TimeoutError'.
+      // Tidy up: once the promise settles, the timer must be cleared.
+      function withTimeout(promise, ms) {
+        return promise;
+      }
+
+      const slow = new Promise((resolve) => setTimeout(() => resolve('slow'), 500));
+      try {
+        console.log(await withTimeout(slow, 100));
+      } catch (error) {
+        console.log(error.name, error.message);
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      const after = (ms, value, fail) => new Promise((resolve, reject) => setTimeout(() => (fail ? reject(new Error(value)) : resolve(value)), ms));
+      test('a fast promise wins', async () => assert.equal(await withTimeout(after(10, 'fast'), 200), 'fast'));
+      test('a slow promise times out', async () => {
+        const error = await assert.rejects(withTimeout(after(300, 'slow'), 30));
+        assert.equal(error.name, 'TimeoutError');
+      });
+      test('a rejection passes through', async () => assert.rejects(withTimeout(after(10, 'broken', true), 200), /broken/));
+      test('the timer is cleared', async () => {
+        const original = globalThis.clearTimeout;
+        let cleared = 0;
+        globalThis.clearTimeout = (id) => { cleared++; original(id); };
+        try {
+          await withTimeout(after(5, 'ok'), 1000);
+        } finally {
+          globalThis.clearTimeout = original;
+        }
+        assert.equal(cleared, 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

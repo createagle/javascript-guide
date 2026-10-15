@@ -59,6 +59,10 @@ for (const path of pages) {
     }
     if (scheme === 'light' && /exercises\/\d+-final\.html$/.test(path)) {
       const summaries = await page.$$eval('.pg-tests-summary', (els) => els.map((e) => e.textContent));
+      // A page whose source has tests must report them: no summary means the code never got to run them
+      const source = await (await page.request.get(BASE + path)).text();
+      const testBlocks = (source.match(/class="tests"/g) || []).length;
+      if (summaries.filter((s) => /\d+ \/ \d+/.test(s)).length < testBlocks) problems.push('tests did not run (look for an error in the output)');
       for (const s of summaries) {
         const m = s.match(/(\d+) \/ (\d+)/);
         if (m && m[1] !== m[2]) problems.push('tests failing: ' + s);
