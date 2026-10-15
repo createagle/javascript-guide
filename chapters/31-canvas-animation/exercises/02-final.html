@@ -19,9 +19,8 @@
       // and sets up the context so drawing code can keep using CSS pixels. It returns the 2D context.
       function fitCanvas(canvas) {
         const ratio = window.devicePixelRatio || 1;
-        const { width, height } = canvas.getBoundingClientRect();
-        canvas.width = Math.round(width * ratio);      // the bitmap: real device pixels
-        canvas.height = Math.round(height * ratio);
+        canvas.width = Math.round(canvas.clientWidth * ratio);     // the bitmap: real device pixels
+        canvas.height = Math.round(canvas.clientHeight * ratio);
         const ctx = canvas.getContext('2d');
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);    // 1 unit = 1 CSS pixel (set, not scale: safe to call again)
         return ctx;

@@ -36,7 +36,8 @@
     // A sharp canvas: the bitmap has devicePixelRatio pixels per CSS pixel, and we draw in CSS pixels
     function fit() {
       const ratio = window.devicePixelRatio || 1;
-      ({ width, height } = canvas.getBoundingClientRect());
+      width = canvas.clientWidth;                   // the CSS size inside the border
+      height = canvas.clientHeight;
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
