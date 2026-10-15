@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 1-2 · Final: Three Lines in the Console</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 1-2">
+    <script type="text/plain" class="code">
+      // 1. Print your name with console.log
+      console.log('Ada Lovelace');
+
+      // 2. Print how many hours there are in a 365-day year. Let JavaScript do the math.
+      console.log(365 * 24);
+
+      // 3. Print a warning with console.warn
+      console.warn('This is only a warning');
+    </script>
+    <script type="text/plain" class="tests">
+      test('prints something with console.log', () => {
+        const line = consoleOutput.find((l) => l.level === 'log' && l.text.trim() !== '');
+        assert.ok(line, 'Nothing was printed with console.log');
+      });
+      test('prints 8760, the hours in a year', () => {
+        assert.ok(consoleOutput.some((l) => l.text.includes('8760')), 'No line contains 8760');
+      });
+      test('prints a warning with console.warn', () => {
+        assert.ok(consoleOutput.some((l) => l.level === 'warn'), 'Nothing was printed with console.warn');
+      });
+    </script>
+  </div>
+</body>
+</html>

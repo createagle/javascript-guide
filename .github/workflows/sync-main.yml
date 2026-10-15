@@ -1,0 +1,47 @@
+# Claude 推送到 claude/** 分支后：快进合并到 main，再触发 Pages 部署。
+# 用 GITHUB_TOKEN 推送 main 不会触发 pages.yml 的 push 事件，所以这里显式 dispatch 一次；
+# 部署在 main 上运行，符合 github-pages 环境默认只允许默认分支部署的规则。
+name: Sync claude branch to main
+
+on:
+  push:
+    branches: ['claude/**']
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward main
+        run: |
+          # 仓库第一次推送时还没有 main，直接用当前分支创建
+          if git ls-remote --exit-code --heads origin main >/dev/null; then
+            git fetch origin main
+            if ! git merge-base --is-ancestor origin/main HEAD; then
+              echo "::error::main 上有该分支没有的提交，无法快进。请先把 main 合并进 ${GITHUB_REF_NAME} 再推送。"
+              exit 1
+            fi
+          fi
+          git push origin HEAD:main
+
+      - name: Deploy to GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # pages.yml 第一次随本次推送进入 main 时，GitHub 需要几秒才能识别，所以重试。
+        run: |
+          for i in 1 2 3 4 5 6; do
+            gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY" && exit 0
+            sleep 10
+          done
+          exit 1

@@ -10,10 +10,9 @@ permissions:
   pages: write
   id-token: write
 
-# 同一时间只保留一次部署，新的推送会取消还没完成的旧部署
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -22,11 +21,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
-      # 站点是纯静态文件，不需要构建，直接发布 site/ 目录
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: .
       - id: deployment
         uses: actions/deploy-pages@v4

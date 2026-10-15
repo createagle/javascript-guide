@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>1-2 A Console in the Page</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Console">
+    <script type="text/plain" class="code" data-name="Hello">
+      // console.log prints any value; separate several values with commas
+      console.log('Hello, JavaScript!');
+      console.log(1 + 2, 'is a', typeof (1 + 2));
+      console.log([1, 2, 3], { language: 'JavaScript', born: 1995 });
+    </script>
+    <script type="text/plain" class="code" data-name="Console methods">
+      console.info('info: something worth knowing');
+      console.warn('warn: something looks wrong');
+      console.error('error: something failed');
+
+      console.table([
+        { name: 'Chrome', engine: 'V8' },
+        { name: 'Firefox', engine: 'SpiderMonkey' },
+        { name: 'Safari', engine: 'JavaScriptCore' },
+      ]);
+
+      console.group('Grouped lines');
+      console.log('indented');
+      console.groupEnd();
+
+      console.count('clicks');
+      console.count('clicks');
+
+      console.time('loop');
+      for (let i = 0; i < 1e6; i++) {}
+      console.timeEnd('loop');
+    </script>
+    <script type="text/plain" class="code" data-name="Strict mode">
+      // This runner uses strict mode, like modules and classes do.
+      // A typo in a variable name becomes an error instead of a new global variable.
+      let total = 0;
+      totl = 10;
+      console.log(total);
+    </script>
+    <script type="text/plain" class="code" data-name="Top-level await">
+      console.log('Waiting one second…');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      console.log('Done');
+    </script>
+  </div>
+</body>
+</html>
