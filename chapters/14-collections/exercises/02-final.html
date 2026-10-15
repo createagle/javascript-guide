@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 14-2 · Final: Count Words With a Map</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 14-2">
+    <script type="text/plain" class="code">
+      // wordFrequency(text) returns a Map from each lowercase word to how many times it appears,
+      // in the order the words first appear. Words are runs of letters, apostrophes and underscores.
+      function wordFrequency(text) {
+        const counts = new Map();
+        for (const word of text.toLowerCase().match(/[a-z_']+/g) ?? []) {
+          counts.set(word, (counts.get(word) ?? 0) + 1);
+        }
+        return counts;
+      }
+
+      console.log(wordFrequency('The cat and the hat'));
+      console.log(wordFrequency('Every class has a constructor'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('counts words, ignoring case', () => {
+        const counts = wordFrequency('The cat and the hat');
+        assert.equal(counts.get('the'), 2);
+        assert.equal(counts.get('cat'), 1);
+      });
+      test('keeps first-seen order', () => assert.deepEqual([...wordFrequency('b a b c a').keys()], ['b', 'a', 'c']));
+      test("'constructor' is just a word", () => assert.equal(wordFrequency('Every class has a constructor').get('constructor'), 1));
+      test("'__proto__' is just a word", () => assert.equal(wordFrequency('__proto__ and __proto__').get('__proto__'), 2));
+      test('empty text gives an empty Map', () => assert.equal(wordFrequency('').size, 0));
+    </script>
+  </div>
+</body>
+</html>

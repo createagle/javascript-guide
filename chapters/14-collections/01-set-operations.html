@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>14-1 Set Operations</title>
+  <style>
+    .list { width: min(19em, 70vw); font-family: var(--mono); font-size: 13px; }
+    .ops { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 860px; }
+    .ops .btn { font-family: var(--mono); font-size: 12px; }
+    .ops .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    .stage { width: min(940px, 100%); }
+    .venn-panel { flex: 1 1 420px; }
+    .side { flex: 1 1 300px; }
+    svg { display: block; width: 100%; height: auto; }
+    .region { fill: transparent; transition: fill 0.2s; }
+    .region.on { fill: color-mix(in oklch, var(--accent) 28%, transparent); }
+    .ring { fill: none; stroke: var(--fg); stroke-width: 1.5; }
+    .set-name { font: 700 20px system-ui, sans-serif; fill: var(--muted); }
+    .item { font: 13px var(--mono); fill: var(--muted); text-anchor: middle; dominant-baseline: middle; }
+    .item.hit { fill: var(--fg); font-weight: 700; }
+    .side pre.code { font-size: 12px; }
+    .result { margin: 0; font: 700 15px var(--mono); overflow-wrap: anywhere; }
+    .note { font-size: 14px; margin: 10px 0 0; }
+    .support { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">A <input id="a" class="btn list" value="Ada, Bo, Cy, Di, Ed" spellcheck="false"></label>
+    <label class="control">B <input id="b" class="btn list" value="Di, Ed, Fay, Gus" spellcheck="false"></label>
+  </div>
+  <div class="ops" id="ops" role="group" aria-label="Operation"></div>
+  <div class="stage">
+    <figure class="panel venn-panel">
+      <svg viewBox="0 0 420 270" role="img" aria-labelledby="venn-title">
+        <title id="venn-title">Venn diagram of sets A and B</title>
+        <defs>
+          <clipPath id="clip-a"><circle cx="160" cy="135" r="110"/></clipPath>
+          <mask id="not-b"><rect width="420" height="270" fill="white"/><circle cx="260" cy="135" r="110" fill="black"/></mask>
+          <mask id="not-a"><rect width="420" height="270" fill="white"/><circle cx="160" cy="135" r="110" fill="black"/></mask>
+        </defs>
+        <circle class="region" id="r-a" cx="160" cy="135" r="110" mask="url(#not-b)"/>
+        <circle class="region" id="r-b" cx="260" cy="135" r="110" mask="url(#not-a)"/>
+        <circle class="region" id="r-ab" cx="260" cy="135" r="110" clip-path="url(#clip-a)"/>
+        <circle class="ring" cx="160" cy="135" r="110"/>
+        <circle class="ring" cx="260" cy="135" r="110"/>
+        <text class="set-name" x="70" y="30">A</text>
+        <text class="set-name" x="350" y="30">B</text>
+        <g id="items"></g>
+      </svg>
+    </figure>
+    <div class="panel side">
+      <p class="label">Code</p>
+      <pre class="code" id="code"></pre>
+      <p class="label">Result</p>
+      <p class="result" id="result" aria-live="polite"></p>
+      <p class="note" id="note"></p>
+      <p class="support" id="support"></p>
+    </div>
+  </div>
+  <script type="module">
+    // The Set methods are Baseline 2024; the fallbacks keep the page working in older browsers
+    const native = typeof Set.prototype.union === 'function';
+    const fallback = {
+      union: (a, b) => new Set([...a, ...b]),
+      intersection: (a, b) => new Set([...a].filter((x) => b.has(x))),
+      difference: (a, b) => new Set([...a].filter((x) => !b.has(x))),
+      symmetricDifference: (a, b) => new Set([...[...a].filter((x) => !b.has(x)), ...[...b].filter((x) => !a.has(x))]),
+      isSubsetOf: (a, b) => [...a].every((x) => b.has(x)),
+      isSupersetOf: (a, b) => [...b].every((x) => a.has(x)),
+      isDisjointFrom: (a, b) => [...a].every((x) => !b.has(x)),
+    };
+    const call = (name, a, b) => (native ? a[name](b) : fallback[name](a, b));
+
+    // regions: which parts of the diagram the result covers (a = A only, ab = both, b = B only)
+    const OPS = [
+      { name: 'union', code: 'a.union(b)', regions: ['a', 'ab', 'b'], note: 'Everything in A or B (or both). Each value appears once.' },
+      { name: 'intersection', code: 'a.intersection(b)', regions: ['ab'], note: 'Only the values in both sets.' },
+      { name: 'difference', code: 'a.difference(b)', regions: ['a'], note: 'Values in A that are not in B. Order matters: b.difference(a) is the other crescent.' },
+      { name: 'difference', label: 'b.difference(a)', swap: true, code: 'b.difference(a)', regions: ['b'], note: 'Values in B that are not in A.' },
+      { name: 'symmetricDifference', code: 'a.symmetricDifference(b)', regions: ['a', 'b'], note: 'Values in exactly one of the two sets: the union minus the intersection.' },
+      { name: 'isSubsetOf', code: 'a.isSubsetOf(b)', regions: ['a'], test: true, note: 'true when every value of A is also in B, so the highlighted part must be empty.' },
+      { name: 'isSupersetOf', code: 'a.isSupersetOf(b)', regions: ['b'], test: true, note: 'true when A contains every value of B, so the highlighted part must be empty.' },
+      { name: 'isDisjointFrom', code: 'a.isDisjointFrom(b)', regions: ['ab'], test: true, note: 'true when A and B share nothing, so the highlighted part must be empty.' },
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const parse = (text) => new Set(text.split(',').map((s) => s.trim()).filter(Boolean));
+    let current = 0;
+
+    OPS.forEach((op, i) => {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: op.label ?? op.code });
+      button.addEventListener('click', () => { current = i; render(); });
+      $('ops').append(button);
+    });
+
+    function place(items, cx) {
+      // Up to 7 in one column, more in two columns
+      const cols = items.length > 7 ? 2 : 1;
+      const rows = Math.ceil(items.length / cols);
+      return items.map((item, i) => {
+        const col = Math.floor(i / rows);
+        const row = i % rows;
+        const x = cx + (cols === 2 ? (col === 0 ? -24 : 24) : 0);
+        const y = 135 + (row - (rows - 1) / 2) * 22;
+        return { item, x, y };
+      });
+    }
+
+    function render() {
+      const a = parse($('a').value);
+      const b = parse($('b').value);
+      const op = OPS[current];
+      [...$('ops').children].forEach((btn, i) => btn.setAttribute('aria-pressed', String(i === current)));
+      for (const r of ['a', 'b', 'ab']) $('r-' + r).classList.toggle('on', op.regions.includes(r));
+
+      const onlyA = [...a].filter((x) => !b.has(x));
+      const both = [...a].filter((x) => b.has(x));
+      const onlyB = [...b].filter((x) => !a.has(x));
+      const result = op.swap ? call(op.name, b, a) : call(op.name, a, b);
+      const inResult = (x) => (op.test ? op.regions.some((r) => ({ a: onlyA, b: onlyB, ab: both })[r].includes(x)) : result.has(x));
+      const nodes = [...place(onlyA, 95), ...place(both, 210), ...place(onlyB, 325)].map(({ item, x, y }) => {
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('x', x);
+        t.setAttribute('y', y);
+        t.setAttribute('class', 'item' + (inResult(item) ? ' hit' : ''));
+        t.textContent = item;
+        return t;
+      });
+      $('items').replaceChildren(...nodes);
+
+      const list = (set) => `[${[...set].map((x) => `'${x}'`).join(', ')}]`;
+      $('code').textContent = `const a = new Set(${list(a)});\nconst b = new Set(${list(b)});\n\n${op.code}`;
+      $('result').textContent = op.test ? String(result) : `Set(${result.size}) { ${[...result].map((x) => `'${x}'`).join(', ')} }`;
+      $('note').textContent = op.note;
+      $('support').textContent = native ? '' : 'This browser has no Set methods yet: the page uses small fallbacks built from filter and has.';
+    }
+    $('a').addEventListener('input', render);
+    $('b').addEventListener('input', render);
+    render();
+  </script>
+</body>
+</html>

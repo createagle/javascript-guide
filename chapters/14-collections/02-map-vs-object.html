@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>14-2 Map vs Object Keys</title>
+  <style>
+    .intro { margin: 0; max-width: 760px; text-align: center; }
+    .keys { border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px 12px; display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; max-width: 860px; }
+    .keys legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
+    .stage { width: min(940px, 100%); }
+    .stage > .panel { flex: 1 1 360px; }
+    h2 { margin: 0 0 4px; font-size: 15px; }
+    .count { margin: 0 0 8px; font: 13px var(--mono); color: var(--muted); }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; }
+    thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    td { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+    td.empty { color: var(--muted); font-style: italic; font-family: system-ui, sans-serif; }
+    .lookups { width: min(940px, 100%); }
+    .scroll { overflow-x: auto; }
+    tbody th { font-weight: 500; min-width: 12em; }
+    td.differs { background: color-mix(in oklch, var(--warn) 16%, transparent); }
+  </style>
+</head>
+<body class="demo">
+  <p class="intro">The same keys go into a plain object (<code>obj[key] = value</code>) and a Map (<code>map.set(key, value)</code>). Untick keys to see what changes.</p>
+  <fieldset class="keys" id="keys"><legend>Keys to store, in this order</legend></fieldset>
+  <div class="stage">
+    <section class="panel">
+      <h2>Plain object</h2>
+      <p class="count" id="obj-count"></p>
+      <table><thead><tr><th scope="col">Key stored as</th><th scope="col">Value</th></tr></thead><tbody id="obj-rows"></tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Map</h2>
+      <p class="count" id="map-count"></p>
+      <table><thead><tr><th scope="col">Key stored as</th><th scope="col">Value</th></tr></thead><tbody id="map-rows"></tbody></table>
+    </section>
+  </div>
+  <section class="panel lookups">
+    <h2>Lookups</h2>
+    <div class="scroll"><table><thead><tr><th scope="col">Question</th><th scope="col">Object</th><th scope="col">Map</th></tr></thead><tbody id="lookups"></tbody></table></div>
+  </section>
+  <script>
+    'use strict';
+    const userA = { id: 1 };
+    const userB = { id: 1 };
+    const KEYS = [
+      ['1', 1],
+      ["'1'", '1'],
+      ['true', true],
+      ['NaN', NaN],
+      ['userA = { id: 1 }', userA],
+      ['userB = { id: 1 }', userB],
+      ["'__proto__'", '__proto__'],
+    ];
+    // How a Map key looks, keeping its type visible
+    function showKey(key) {
+      if (key === userA) return 'userA (an object)';
+      if (key === userB) return 'userB (an object)';
+      if (typeof key === 'string') return `'${key}' (string)`;
+      return `${String(key)} (${typeof key})`;
+    }
+    const $ = (id) => document.getElementById(id);
+    KEYS.forEach(([label], i) => {
+      const id = 'k' + i;
+      const wrap = document.createElement('label');
+      wrap.className = 'control';
+      wrap.innerHTML = `<input type="checkbox" checked id="${id}"> <code></code>`;
+      wrap.querySelector('code').textContent = label;
+      $('keys').append(wrap);
+      wrap.querySelector('input').addEventListener('change', render);
+    });
+
+    function cell(text, className = '') {
+      return Object.assign(document.createElement('td'), { textContent: text, className });
+    }
+    function preview(value) {
+      if (value === undefined) return 'undefined';
+      if (typeof value === 'function') return `ƒ ${value.name}() (inherited from Object.prototype)`;
+      return String(value);
+    }
+
+    function render() {
+      const obj = {};
+      const map = new Map();
+      KEYS.forEach(([label, key], i) => {
+        if (!$('k' + i).checked) return;
+        const value = `set by key ${label.split(' ')[0]}`;
+        obj[key] = value;
+        map.set(key, value);
+      });
+
+      const entries = Object.entries(obj);
+      $('obj-count').textContent = `Object.keys(obj).length → ${entries.length}`;
+      $('obj-rows').replaceChildren(...entries.map(([k, v]) => {
+        const tr = document.createElement('tr');
+        tr.append(cell(`'${k}' (string)`), cell(v));
+        return tr;
+      }));
+      if (!entries.length) $('obj-rows').append(Object.assign(document.createElement('tr'), { innerHTML: '<td colspan="2" class="empty">(no own keys)</td>' }));
+      $('map-count').textContent = `map.size → ${map.size}`;
+      $('map-rows').replaceChildren(...[...map].map(([k, v]) => {
+        const tr = document.createElement('tr');
+        tr.append(cell(showKey(k)), cell(v));
+        return tr;
+      }));
+
+      const LOOKUPS = [
+        ['Get the number key 1', () => obj[1], () => map.get(1)],
+        ["Get the string key '1'", () => obj['1'], () => map.get('1')],
+        ['Get with userA', () => obj[userA], () => map.get(userA)],
+        ['Get with a new { id: 1 }', () => obj[{ id: 1 }], () => map.get({ id: 1 })],
+        ['Get NaN', () => obj[NaN], () => map.get(NaN)],
+        ["Get 'constructor' (never stored)", () => obj['constructor'], () => map.get('constructor')],
+        ["Has '__proto__' as its own key?", () => Object.hasOwn(obj, '__proto__'), () => map.has('__proto__')],
+      ];
+      $('lookups').replaceChildren(...LOOKUPS.map(([q, fromObj, fromMap]) => {
+        const a = preview(fromObj());
+        const b = preview(fromMap());
+        const tr = document.createElement('tr');
+        tr.append(Object.assign(document.createElement('th'), { scope: 'row', textContent: q }), cell(a, a !== b ? 'differs' : ''), cell(b));
+        return tr;
+      }));
+    }
+    render();
+  </script>
+</body>
+</html>

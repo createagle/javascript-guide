@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 14-1 · Final: Set Operations</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 14-1">
+    <script type="text/plain" class="code">
+      // Two courses and the students who signed up for each.
+      // inBoth(a, b): students in both courses
+      // inOne(a, b): students in exactly one course
+      // headcount(a, b): how many different students there are in total
+      // Return arrays sorted alphabetically.
+      const math = ['Ada', 'Bo', 'Cy', 'Di'];
+      const art = ['Cy', 'Di', 'Ed', 'Bo', 'Fay'];
+
+      function inBoth(a, b) {
+        return [...new Set(a).intersection(new Set(b))].sort();
+      }
+      function inOne(a, b) {
+        return [...new Set(a).symmetricDifference(new Set(b))].sort();
+      }
+      function headcount(a, b) {
+        return new Set(a).union(new Set(b)).size;
+      }
+
+      console.log(inBoth(math, art), inOne(math, art), headcount(math, art));
+    </script>
+    <script type="text/plain" class="tests">
+      test('in both courses', () => assert.deepEqual(inBoth(math, art), ['Bo', 'Cy', 'Di']));
+      test('in exactly one course', () => assert.deepEqual(inOne(math, art), ['Ada', 'Ed', 'Fay']));
+      test('headcount counts each student once', () => assert.equal(headcount(math, art), 6));
+      test('duplicate sign-ups are ignored', () => {
+        assert.deepEqual(inBoth(['Ada', 'Ada'], ['Ada']), ['Ada']);
+        assert.deepEqual(inOne(['Ada', 'Ada', 'Bo'], ['Bo']), ['Ada']);
+        assert.equal(headcount(['Ada', 'Ada'], []), 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 14-3 · Start: Remember Without Leaking</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 14-3">
+    <script type="text/plain" class="code">
+      // area(shape) is slow, so remember the result for each shape object.
+      // Rules: compute at most once per shape, never change the shape object
+      // (some shapes are frozen), and do not keep shapes alive after the program drops them.
+      let computed = 0;
+      function slowArea(shape) {
+        computed++;
+        return shape.width * shape.height;
+      }
+
+      function area(shape) {
+        if (shape._area === undefined) shape._area = slowArea(shape);
+        return shape._area;
+      }
+
+      const box = { width: 2, height: 3 };
+      console.log(area(box), area(box), 'computed', computed, 'times');
+    </script>
+    <script type="text/plain" class="tests">
+      test('computes once per shape', () => {
+        computed = 0;
+        const s = { width: 4, height: 5 };
+        assert.equal(area(s), 20);
+        assert.equal(area(s), 20);
+        assert.equal(computed, 1);
+      });
+      test('different shapes are separate', () => {
+        computed = 0;
+        assert.equal(area({ width: 1, height: 1 }), 1);
+        assert.equal(area({ width: 1, height: 1 }), 1);
+        assert.equal(computed, 2);
+      });
+      test('does not change the shape', () => {
+        const s = { width: 2, height: 2 };
+        area(s);
+        assert.deepEqual(Object.keys(s), ['width', 'height']);
+      });
+      test('works on frozen shapes', () => assert.equal(area(Object.freeze({ width: 3, height: 3 })), 9));
+    </script>
+  </div>
+</body>
+</html>
