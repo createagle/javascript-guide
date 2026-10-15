@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 15-3 · Final: Negative Indexes With Reflect</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 15-3">
+    <script type="text/plain" class="code">
+      // withNegativeIndex(array) returns a proxy where p[-1] is the last item, p[-2] the one before, …
+      // Everything else must keep working: length, push, map, Array.isArray.
+      function withNegativeIndex(array) {
+        return new Proxy(array, {
+          get(target, key, receiver) {
+            // Property keys arrive as strings: p[-1] asks for the key '-1'
+            if (typeof key === 'string' && /^-\d+$/.test(key)) {
+              key = String(target.length + Number(key));
+            }
+            return Reflect.get(target, key, receiver);
+          },
+        });
+      }
+
+      const letters = withNegativeIndex(['a', 'b', 'c']);
+      console.log(letters[-1], letters[0], letters.length);
+    </script>
+    <script type="text/plain" class="tests">
+      test('p[-1] is the last item', () => assert.equal(withNegativeIndex([1, 2, 3])[-1], 3));
+      test('p[-3] is the first item', () => assert.equal(withNegativeIndex([1, 2, 3])[-3], 1));
+      test('too far back is undefined', () => assert.equal(withNegativeIndex([1, 2, 3])[-4], undefined));
+      test('normal indexes and length still work', () => {
+        const p = withNegativeIndex(['x', 'y']);
+        assert.equal(p[1], 'y');
+        assert.equal(p.length, 2);
+      });
+      test('follows changes made through push', () => {
+        const p = withNegativeIndex([1]);
+        p.push(9);
+        assert.equal(p[-1], 9);
+      });
+      test('is still an array', () => {
+        const p = withNegativeIndex([1, 2]);
+        assert.ok(Array.isArray(p));
+        assert.deepEqual(p.map((n) => n * 10), [10, 20]);
+      });
+    </script>
+  </div>
+</body>
+</html>

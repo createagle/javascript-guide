@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 15-2 · Final: A Strict Record With Proxy</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 15-2">
+    <script type="text/plain" class="code">
+      // strictRecord(fields) returns an object that only accepts the given fields.
+      // - reading a field that does not exist throws a ReferenceError (catches typos)
+      // - writing an unknown field throws a TypeError
+      // - writing a known field works as usual
+      // Names JavaScript itself looks up: JSON.stringify asks for toJSON, await asks for then
+      const ASKED_BY_THE_LANGUAGE = new Set(['toJSON', 'then']);
+
+      function strictRecord(fields) {
+        return new Proxy({ ...fields }, {
+          get(target, key, receiver) {
+            // Symbol keys (Symbol.toPrimitive, Symbol.iterator…) also come from the language: let them through
+            if (typeof key === 'string' && !(key in target) && !ASKED_BY_THE_LANGUAGE.has(key)) {
+              throw new ReferenceError(`No field “${key}”`);
+            }
+            return Reflect.get(target, key, receiver);
+          },
+          set(target, key, value, receiver) {
+            if (!Object.hasOwn(target, key)) throw new TypeError(`Cannot add field “${String(key)}”`);
+            return Reflect.set(target, key, value, receiver);
+          },
+        });
+      }
+
+      const user = strictRecord({ name: 'Ada', email: 'ada@example.com' });
+      user.name = 'Ada Lovelace';
+      console.log(user.name);
+    </script>
+    <script type="text/plain" class="tests">
+      test('reads known fields', () => assert.equal(strictRecord({ a: 1 }).a, 1));
+      test('writes known fields', () => {
+        const r = strictRecord({ a: 1 });
+        r.a = 2;
+        assert.equal(r.a, 2);
+      });
+      test('a typo when reading throws', () => assert.throws(() => strictRecord({ email: 'x' }).emial, ReferenceError));
+      test('adding a field throws', () => assert.throws(() => { strictRecord({ a: 1 }).b = 2; }, TypeError));
+      test('still works with Object.keys and JSON', () => {
+        const r = strictRecord({ a: 1, b: 2 });
+        assert.deepEqual(Object.keys(r), ['a', 'b']);
+        assert.equal(JSON.stringify(r), '{"a":1,"b":2}');
+      });
+      test('can be awaited like any object', async () => assert.equal((await strictRecord({ a: 1 })).a, 1));
+      test("does not change the fields object it was given", () => {
+        const fields = { a: 1 };
+        strictRecord(fields).a = 5;
+        assert.equal(fields.a, 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>15-2 Proxy Trap Logger</title>
+  <style>
+    .stage { width: min(960px, 100%); }
+    .stage > * { flex: 1 1 360px; }
+    .left pre.code { font-size: 12px; white-space: pre; word-break: normal; margin-bottom: 12px; }
+    .ops { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ops .btn { font-family: var(--mono); font-size: 12px; }
+    .reset { margin-top: 12px; }
+    .result { margin: 0 0 12px; font: 600 14px var(--mono); overflow-wrap: anywhere; white-space: pre-wrap; }
+    .result.bad { color: var(--bad); }
+    .traps { margin: 0; padding-left: 28px; font-size: 13px; max-height: 380px; overflow: auto; }
+    .traps li { padding: 2px 0; }
+    .traps .trap { color: var(--accent); font-weight: 700; }
+    .traps .key { font-family: var(--mono); color: var(--muted); }
+    .traps .none { list-style: none; color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body class="demo">
+  <div class="stage">
+    <div class="panel left">
+      <p class="label">Target, wrapped in a proxy that logs every trap</p>
+      <pre class="code">const target = {
+  name: 'Ada',
+  age: 36,
+  greet() {
+    return `Hi, I am ${this.name}`;
+  },
+};
+const p = new Proxy(target, logEveryTrap);</pre>
+      <p class="label">Run an operation on <code>p</code></p>
+      <div class="ops" id="ops"></div>
+      <button class="btn reset" id="reset" type="button">Reset target</button>
+    </div>
+    <div class="panel right">
+      <p class="label">Result</p>
+      <p class="result" id="result">Pick an operation.</p>
+      <p class="label">Traps called, in order</p>
+      <ol class="traps" id="traps"></ol>
+    </div>
+  </div>
+  <script type="module">
+    let calls = [];
+    // A handler with every trap: each one records itself, then does the default thing through Reflect
+    const logEveryTrap = {};
+    for (const trap of Object.getOwnPropertyNames(Reflect)) {
+      logEveryTrap[trap] = (...args) => {
+        const key = args[1];
+        calls.push({ trap, key: typeof key === 'string' || typeof key === 'symbol' ? String(key) : '' });
+        return Reflect[trap](...args);
+      };
+    }
+
+    const makeTarget = () => ({
+      name: 'Ada',
+      age: 36,
+      greet() {
+        return `Hi, I am ${this.name}`;
+      },
+    });
+    let target = makeTarget();
+    let p = new Proxy(target, logEveryTrap);
+
+    const OPS = [
+      ['p.name', () => p.name],
+      ['p.age = 37', () => { p.age = 37; }],
+      ["'name' in p", () => 'name' in p],
+      ['p.greet()', () => p.greet()],
+      ['Object.keys(p)', () => Object.keys(p)],
+      ['JSON.stringify(p)', () => JSON.stringify(p)],
+      ['{ ...p }', () => ({ ...p })],
+      ['for (const k in p)', () => { const keys = []; for (const k in p) keys.push(k); return keys; }],
+      ['delete p.age', () => delete p.age],
+      ['Object.freeze(p)', () => { Object.freeze(p); return 'frozen'; }],
+      ['`${p}`', () => `${p}`],
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    function show(value) {
+      if (value === undefined) return 'undefined';
+      if (typeof value === 'string') return `'${value}'`;
+      return JSON.stringify(value);
+    }
+    OPS.forEach(([label, op]) => {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: label });
+      button.addEventListener('click', () => {
+        calls = [];
+        let text;
+        try {
+          text = '→ ' + show(op());
+          $('result').className = 'result';
+        } catch (error) {
+          text = `${error.name}: ${error.message}`;
+          $('result').className = 'result bad';
+        }
+        $('result').textContent = `${label}  ${text}`;
+        $('traps').replaceChildren(...calls.map(({ trap, key }) => {
+          const li = document.createElement('li');
+          li.append(Object.assign(document.createElement('code'), { className: 'trap', textContent: trap }));
+          if (key) li.append(' ', Object.assign(document.createElement('span'), { className: 'key', textContent: key }));
+          return li;
+        }));
+        if (!calls.length) $('traps').append(Object.assign(document.createElement('li'), { className: 'none', textContent: '(no traps)' }));
+      });
+      $('ops').append(button);
+    });
+    $('reset').addEventListener('click', () => {
+      target = makeTarget();
+      p = new Proxy(target, logEveryTrap);
+      $('result').textContent = 'Target reset.';
+      $('traps').replaceChildren();
+    });
+  </script>
+</body>
+</html>

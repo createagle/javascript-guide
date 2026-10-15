@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 15-1 · Final: Money and Symbol.toPrimitive</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 15-1">
+    <script type="text/plain" class="code">
+      // A Money value should behave well wherever JavaScript converts it:
+      //   `${price}` → '$12.50'     +price → 12.5     price > 10 → true
+      //   Object.prototype.toString.call(price) → '[object Money]'
+      // Use Symbol.toPrimitive and Symbol.toStringTag.
+      class Money {
+        constructor(cents) {
+          this.cents = cents;
+        }
+        // hint is 'string' for template literals and String(), 'number' for +x and comparisons,
+        // 'default' for + and ==
+        [Symbol.toPrimitive](hint) {
+          const dollars = this.cents / 100;
+          return hint === 'string' ? `$${dollars.toFixed(2)}` : dollars;
+        }
+        get [Symbol.toStringTag]() {
+          return 'Money';
+        }
+      }
+
+      const price = new Money(1250);
+      console.log(`${price}`, +price, price > 10);
+    </script>
+    <script type="text/plain" class="tests">
+      test('template literals show dollars', () => assert.equal(`${new Money(1250)}`, '$12.50'));
+      test('String() too', () => assert.equal(String(new Money(5)), '$0.05'));
+      test('unary plus gives a number', () => assert.equal(+new Money(1250), 12.5));
+      test('comparisons use the number', () => {
+        assert.ok(new Money(1250) > 10);
+        assert.ok(new Money(999) < 10);
+      });
+      test('addition with a number adds', () => assert.equal(new Money(100) + 1, 2));
+      test('it reports its own type', () => assert.equal(Object.prototype.toString.call(new Money(1)), '[object Money]'));
+    </script>
+  </div>
+</body>
+</html>

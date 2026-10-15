@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>15-1 Reactive Binding With Proxy</title>
+  <style>
+    .stage { width: min(980px, 100%); align-items: stretch; }
+    .form { flex: 1 1 260px; display: grid; gap: 10px; align-content: start; }
+    .form label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+    .form label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
+    .form input:not([type="checkbox"]) { font-size: 14px; }
+    .form [aria-invalid="true"] { border-color: var(--bad); }
+    .error { margin: 0; min-height: 1.4em; font-size: 13px; color: var(--bad); }
+    .view { flex: 1 1 240px; }
+    .summary { font-size: 18px; font-weight: 600; margin: 0 0 12px; overflow-wrap: anywhere; }
+    .totals { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+    .totals dt { color: var(--muted); }
+    .totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+    .totals dt:last-of-type, .totals dd:last-of-type { font-weight: 700; color: var(--fg); border-top: 1px solid var(--border); padding-top: 6px; }
+    .log-panel { flex: 1 1 260px; }
+    .log { margin: 0; padding-left: 0; list-style: none; font: 12px/1.6 var(--mono); max-height: 280px; overflow: auto; }
+    .log li { padding: 2px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+    .log .bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="stage">
+    <form class="panel form" id="form">
+      <p class="label">Inputs write to <code>state</code></p>
+      <label>Name <input name="name" class="btn" autocomplete="off"></label>
+      <label>Quantity <input name="quantity" type="number" min="0" step="1" class="btn"></label>
+      <label>Unit price <input name="price" type="number" min="0" step="0.01" class="btn"></label>
+      <label class="check"><input name="member" type="checkbox"> Member (10% off)</label>
+      <p class="error" id="error" role="alert"></p>
+      <button class="btn" id="direct" type="button">Run state.quantity = 12 in code</button>
+    </form>
+    <div class="panel view">
+      <p class="label">View, re-rendered from <code>state</code></p>
+      <p class="summary" id="summary"></p>
+      <dl class="totals" id="totals"></dl>
+    </div>
+    <div class="panel log-panel">
+      <p class="label">set trap calls</p>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </div>
+  </div>
+  <script type="module">
+    // reactive(target, onChange): every successful write calls onChange.
+    // A validate(key, value) function can reject a write by throwing.
+    function reactive(target, { validate, onChange }) {
+      return new Proxy(target, {
+        set(obj, key, value, receiver) {
+          validate?.(key, value);
+          const old = obj[key];
+          const ok = Reflect.set(obj, key, value, receiver);
+          if (ok && !Object.is(old, value)) onChange(key, value, old);
+          return ok;
+        },
+      });
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const form = $('form');
+
+    const state = reactive({ name: 'Notebook', quantity: 3, price: 4.5, member: false }, {
+      validate(key, value) {
+        if (!['name', 'quantity', 'price', 'member'].includes(key)) throw new TypeError(`Unknown field “${String(key)}”`);
+        if (key === 'quantity' && (!Number.isInteger(value) || value < 0)) throw new RangeError('Quantity must be a whole number, 0 or more');
+        if (key === 'price' && !(value >= 0)) throw new RangeError('Price must be a number, 0 or more');
+      },
+      onChange(key, value, old) {
+        log(`set ${key}: ${JSON.stringify(old)} → ${JSON.stringify(value)}`);
+        render();
+      },
+    });
+
+    function log(text, bad = false) {
+      const li = Object.assign(document.createElement('li'), { textContent: text, className: bad ? 'bad' : '' });
+      $('log').prepend(li);
+      while ($('log').children.length > 30) $('log').lastChild.remove();
+    }
+
+    function render() {
+      const subtotal = state.quantity * state.price;
+      const discount = state.member ? subtotal * 0.1 : 0;
+      const money = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+      $('summary').textContent = `${state.quantity} × ${state.name || '(unnamed)'}`;
+      $('totals').replaceChildren(...[['Subtotal', money(subtotal)], ['Discount', money(-discount)], ['Total', money(subtotal - discount)]]
+        .flatMap(([k, v]) => [Object.assign(document.createElement('dt'), { textContent: k }), Object.assign(document.createElement('dd'), { textContent: v })]));
+      // Keep the inputs in step when code (not the user) changes state
+      for (const field of form.elements) {
+        if (!field.name) continue;
+        if (field.type === 'checkbox') field.checked = state[field.name];
+        else if (document.activeElement !== field) field.value = state[field.name];
+      }
+    }
+
+    form.addEventListener('input', (event) => {
+      const field = event.target;
+      const value = field.type === 'checkbox' ? field.checked : field.type === 'number' ? field.valueAsNumber : field.value;
+      try {
+        state[field.name] = value;
+        $('error').textContent = '';
+        field.removeAttribute('aria-invalid');
+      } catch (error) {
+        $('error').textContent = `${error.name}: ${error.message}`;
+        field.setAttribute('aria-invalid', 'true');
+        log(`rejected ${field.name} = ${JSON.stringify(value)}`, true);
+      }
+    });
+    $('direct').addEventListener('click', () => { state.quantity = 12; });
+    render();
+  </script>
+</body>
+</html>
