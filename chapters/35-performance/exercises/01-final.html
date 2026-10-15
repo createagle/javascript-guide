@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 35-1 · Final: Measure with the Performance API</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 35-1">
+    <script type="text/plain" class="code">
+      // timed(name, fn) runs fn (sync or async) and records how long it took with the Performance API,
+      // so the time also shows up in the DevTools Performance panel:
+      // - performance.mark(`${name}:start`) before, performance.mark(`${name}:end`) after,
+      //   then performance.measure(name, startMark, endMark)
+      // - clear the two marks afterwards (the measure stays)
+      // - resolve to fn's result; if fn throws or rejects, still record the measure, then rethrow
+      async function timed(name, fn) {
+        const start = `${name}:start`;
+        const end = `${name}:end`;
+        performance.mark(start);
+        try {
+          return await fn();              // await: an async fn is only done when its promise settles
+        } finally {
+          // finally runs after a result and after an error alike
+          performance.mark(end);
+          performance.measure(name, start, end);
+          performance.clearMarks(start);
+          performance.clearMarks(end);
+        }
+      }
+
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      await timed('wait 30 ms', () => sleep(30));
+      console.table(performance.getEntriesByType('measure').map(({ name, duration }) => ({ name, duration })));
+    </script>
+    <script type="text/plain" class="tests">
+      const measures = (name) => performance.getEntriesByName(name, 'measure');
+      const busy = (ms) => { const end = performance.now() + ms; while (performance.now() < end); };
+
+      test('records a measure that covers async work', async () => {
+        await timed('async work', () => sleep(50));
+        assert.equal(measures('async work').length, 1);
+        assert.ok(measures('async work')[0].duration >= 45, `duration ${measures('async work')[0]?.duration}`);
+      });
+      test('works for synchronous work and returns the result', async () => {
+        assert.equal(await timed('sync work', () => { busy(20); return 42; }), 42);
+        assert.ok(measures('sync work')[0].duration >= 18);
+      });
+      test('clears its marks', async () => {
+        await timed('tidy', () => 1);
+        assert.equal(performance.getEntriesByName('tidy:start', 'mark').length, 0);
+        assert.equal(performance.getEntriesByName('tidy:end', 'mark').length, 0);
+      });
+      test('records the measure even when fn fails, and rethrows', async () => {
+        await assert.rejects(timed('boom', async () => { await sleep(5); throw new Error('boom'); }), /boom/);
+        assert.equal(measures('boom').length, 1);
+      });
+    </script>
+  </div>
+</body>
+</html>

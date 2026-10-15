@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>35-1 Layout Thrashing</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    td:last-child { font-weight: 600; }
+    tr.slow td:last-child { color: var(--bad); }
+    tr.fast td:last-child { color: var(--good); }
+    .empty td { color: var(--muted); font-weight: 400; }
+    .bars { height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
+    .row { height: 3px; margin-bottom: 1px; }
+    .bar { height: 100%; width: 50%; border-radius: 2px; background: hsl(calc(var(--hue) * 1deg) 65% 55%); }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Bars
+      <select class="btn" id="count"><option>300</option><option selected>1000</option><option>2000</option></select></label>
+    <button class="btn" type="button" id="bad">Read, write, read, write…</button>
+    <button class="btn btn-primary" type="button" id="good">Read all, then write all</button>
+  </div>
+  <div class="layout">
+    <div class="panel">
+      <table>
+        <thead><tr><th scope="col">Pattern</th><th scope="col">Bars</th><th scope="col">Layouts</th><th scope="col">Time</th></tr></thead>
+        <tbody id="results"><tr class="empty"><td colspan="4">Press a button to resize every bar.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="bars" id="bars" aria-hidden="true"></div>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    let bars = [];
+
+    function build() {
+      $('bars').replaceChildren(...Array.from({ length: Number($('count').value) }, (_, i) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.setProperty('--hue', (i * 7) % 360);
+        row.append(bar);
+        return row;
+      }));
+      bars = [...$('bars').querySelectorAll('.bar')];
+    }
+
+    // Each bar gets a new share of its row's width
+    function shuffleShares() {
+      for (const bar of bars) bar.dataset.share = (0.15 + Math.random() * 0.85).toFixed(3);
+    }
+
+    // Bad: every read needs an up-to-date layout, and every write makes it stale again
+    function interleaved() {
+      for (const bar of bars) {
+        const width = bar.parentElement.clientWidth;                  // read: forces a layout
+        bar.style.width = `${Math.round(width * bar.dataset.share)}px`; // write: invalidates it
+      }
+    }
+
+    // Good: all reads first (one layout), then all writes
+    function batched() {
+      const widths = bars.map((bar) => bar.parentElement.clientWidth);
+      bars.forEach((bar, i) => {
+        bar.style.width = `${Math.round(widths[i] * bar.dataset.share)}px`;
+      });
+    }
+
+    function measure(pattern, fn, layouts) {
+      shuffleShares();
+      const start = performance.now();
+      fn();
+      void document.body.offsetHeight;   // include the final layout in the time, for both patterns
+      const ms = performance.now() - start;
+      $('results').querySelector('.empty')?.remove();
+      const tr = document.createElement('tr');
+      for (const text of [pattern, bars.length, layouts, `${ms.toFixed(1)} ms`]) {
+        tr.append(Object.assign(document.createElement('td'), { textContent: text }));
+      }
+      tr.className = fn === interleaved ? 'slow' : 'fast';
+      $('results').prepend(tr);
+      while ($('results').children.length > 8) $('results').lastElementChild.remove();
+    }
+
+    $('bad').addEventListener('click', () => measure('Read, write…', interleaved, `≈ ${bars.length}`));
+    $('good').addEventListener('click', () => measure('Read all, write all', batched, '1'));
+    $('count').addEventListener('change', build);
+    build();
+  </script>
+</body>
+</html>

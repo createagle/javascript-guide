@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 35-2 · Final: Break Up a Long Task</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 35-2">
+    <script type="text/plain" class="code">
+      // processInChunks(items, fn, { budget = 10, yieldToMain }) calls fn(item, index) for every item and
+      // resolves to the array of results, without blocking the main thread for long:
+      // after each item, if more than `budget` ms have passed since the last pause, await yieldToMain().
+      // yieldToMain defaults to a setTimeout(0) pause, which lets input, rendering and timers run.
+      const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
+      async function processInChunks(items, fn, { budget = 10, yieldToMain = pause } = {}) {
+        const results = [];
+        let sliceStart = performance.now();
+        for (let i = 0; i < items.length; i++) {
+          results.push(fn(items[i], i));
+          if (performance.now() - sliceStart > budget) {
+            await yieldToMain();          // the rest continues in a later task
+            sliceStart = performance.now();
+          }
+        }
+        return results;
+      }
+
+      // Some slow work: about 1 ms per item
+      const busy = (ms) => { const end = performance.now() + ms; while (performance.now() < end); };
+      const started = performance.now();
+      const squares = await processInChunks(Array.from({ length: 50 }, (_, i) => i), (n) => { busy(1); return n * n; });
+      console.log(squares.slice(0, 5), `… in ${Math.round(performance.now() - started)} ms`);
+    </script>
+    <script type="text/plain" class="tests">
+      test('returns every result, in order, with the index', async () => {
+        assert.deepEqual(await processInChunks(['a', 'b', 'c'], (item, i) => `${i}:${item}`), ['0:a', '1:b', '2:c']);
+        assert.deepEqual(await processInChunks([], (x) => x), []);
+      });
+      test('pauses during long work, and no slice runs much longer than the budget', async () => {
+        const pauses = [];
+        let last = performance.now();
+        const slices = [];
+        const yieldToMain = () => {
+          const now = performance.now();
+          slices.push(now - last);
+          pauses.push(now);
+          return pause().then(() => { last = performance.now(); });
+        };
+        await processInChunks(Array.from({ length: 40 }, (_, i) => i), () => busy(2), { budget: 10, yieldToMain });
+        assert.ok(pauses.length >= 4 && pauses.length <= 10, `paused ${pauses.length} times`);
+        assert.ok(Math.max(...slices) < 20, `the longest slice took ${Math.round(Math.max(...slices))} ms`);
+      });
+      test('other tasks get to run before the work ends', async () => {
+        let done = 0;
+        let timerSawDone = -1;
+        setTimeout(() => { timerSawDone = done; }, 0);
+        await processInChunks(Array.from({ length: 30 }, (_, i) => i), () => { busy(2); done++; });
+        assert.ok(timerSawDone >= 0 && timerSawDone < 30, 'the timer only ran after all the work');
+      });
+    </script>
+  </div>
+</body>
+</html>

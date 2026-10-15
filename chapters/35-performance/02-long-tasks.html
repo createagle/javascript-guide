@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>35-2 Long Tasks and INP</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .layout .panel { display: grid; gap: 10px; }
+    .try .btn { justify-self: start; }
+    .field { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .field input { flex: 1; min-width: 0; font: inherit; color: var(--fg); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    progress { width: 100%; }
+    .status { margin: 0; font-size: 13px; color: var(--muted); }
+    .stats { margin: 0; display: grid; gap: 6px; }
+    .stats div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+    .stats dt { color: var(--muted); }
+    .stats dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .log { list-style: none; margin: 0; padding: 0; font: 12px/1.7 var(--mono); max-height: 180px; overflow: auto; }
+    .log .good { color: var(--good); }
+    .log .warn { color: var(--warn); }
+    .log .bad { color: var(--bad); }
+    .log:empty::before { content: 'No interactions yet.'; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <button class="btn" type="button" data-mode="long">One long task</button>
+    <button class="btn" type="button" data-mode="timeout">Chunks + setTimeout</button>
+    <button class="btn" type="button" data-mode="yield" id="yield-button">Chunks + scheduler.yield()</button>
+  </div>
+  <div class="layout">
+    <div class="panel try">
+      <p class="label">While it runs, try these</p>
+      <button class="btn btn-primary" type="button" id="tap">Clicked 0 times</button>
+      <label class="field">Type here <input id="text" autocomplete="off"></label>
+      <progress id="progress" max="1" value="0"></progress>
+      <p class="status" id="status" role="status">1 second of work, in 5 ms pieces.</p>
+    </div>
+    <div class="panel">
+      <dl class="stats">
+        <div><dt>Longest gap between frames</dt><dd id="gap">–</dd></div>
+        <div><dt>Slowest interaction (≈ INP)</dt><dd id="inp">–</dd></div>
+      </dl>
+      <p class="label">Interactions: time from input to the next paint</p>
+      <ol class="log" id="log"></ol>
+    </div>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const UNIT_MS = 5, UNITS = 200, SLICE_MS = 50;
+
+    // A piece of "work": busy for 5 ms (stands in for real computation)
+    function unit() {
+      const end = performance.now() + UNIT_MS;
+      while (performance.now() < end) { /* compute */ }
+    }
+
+    const yielders = {
+      timeout: () => new Promise((resolve) => setTimeout(resolve, 0)),
+      yield: () => scheduler.yield(),             // continues before other queued tasks, after input
+    };
+    const hasYield = 'scheduler' in globalThis && 'yield' in globalThis.scheduler;
+    if (!hasYield) {
+      $('yield-button').disabled = true;
+      $('yield-button').title = 'scheduler.yield() is not supported in this browser';
+    }
+
+    async function work(mode) {
+      let sliceStart = performance.now();
+      for (let i = 0; i < UNITS; i++) {
+        unit();
+        if (mode !== 'long' && performance.now() - sliceStart >= SLICE_MS) {
+          $('progress').value = (i + 1) / UNITS;
+          await yielders[mode]();                 // let the browser handle input and paint
+          sliceStart = performance.now();
+        }
+      }
+      $('progress').value = 1;
+    }
+
+    // Watch the frames while the work runs
+    let running = false, lastFrame = 0, worstGap = 0, worst = 0;
+    function frame() {
+      const now = performance.now();
+      if (lastFrame) worstGap = Math.max(worstGap, now - lastFrame);
+      lastFrame = now;
+      if (running) requestAnimationFrame(frame);
+    }
+
+    document.querySelector('.controls').addEventListener('click', async (event) => {
+      const mode = event.target.closest('button')?.dataset.mode;
+      if (!mode || running) return;
+      running = true;
+      worstGap = 0;
+      lastFrame = 0;
+      $('progress').value = 0;
+      $('log').replaceChildren();
+      worst = 0;
+      $('inp').textContent = '–';
+      $('status').textContent = `Running: ${event.target.textContent}…`;
+      requestAnimationFrame(frame);
+      // Start after the next frame, so the button press itself is painted first
+      await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const start = performance.now();
+      await work(mode);
+      const total = performance.now() - start;
+      requestAnimationFrame(() => {
+        running = false;
+        $('gap').textContent = `${Math.round(worstGap)} ms`;
+        $('status').textContent = `Done in ${Math.round(total)} ms.`;
+      });
+    });
+
+    // Interaction latency: from the input event's timestamp to the next paint after its handler ran
+    function track(event, label) {
+      const startedAt = event.timeStamp;
+      requestAnimationFrame(() => setTimeout(() => {
+        const ms = performance.now() - startedAt;
+        worst = Math.max(worst, ms);
+        $('inp').textContent = `${Math.round(worst)} ms`;
+        const li = document.createElement('li');
+        li.textContent = `${label}: ${Math.round(ms)} ms`;
+        li.className = ms > 200 ? 'bad' : ms > 100 ? 'warn' : 'good';
+        $('log').prepend(li);
+      }, 0));
+    }
+    let taps = 0;
+    $('tap').addEventListener('click', (event) => {
+      $('tap').textContent = `Clicked ${++taps} times`;
+      track(event, 'click');
+    });
+    $('text').addEventListener('keydown', (event) => track(event, `key "${event.key}"`));
+  </script>
+</body>
+</html>

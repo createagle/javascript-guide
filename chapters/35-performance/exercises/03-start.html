@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 35-3 · Start: A Cache That Does Not Leak</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 35-3">
+    <script type="text/plain" class="code">
+      // memoize(fn, { max = 100 }) caches fn's results by its single argument (a string or number).
+      // A cache that only grows is a memory leak in a page that stays open for hours, so keep at most `max`
+      // entries: when a new entry would go over max, drop the LEAST RECENTLY USED one (a cache hit is a use).
+      // Results that are falsy (0, '', undefined) are cached too. memoized.cache is the Map it uses.
+      function memoize(fn) {
+        const cache = new Map();
+        function memoized(key) {
+          if (!cache.get(key)) cache.set(key, fn(key));
+          return cache.get(key);
+        }
+        memoized.cache = cache;
+        return memoized;
+      }
+
+      let calls = 0;
+      const slowSquare = (n) => { calls++; return n * n; };
+      const square = memoize(slowSquare, { max: 3 });
+      for (const n of [1, 2, 3, 1, 4, 1, 2]) square(n);
+      console.log(`fn called ${calls} times; cached keys:`, [...square.cache.keys()]);
+    </script>
+    <script type="text/plain" class="tests">
+      const counting = (f) => {
+        const wrapped = (x) => { wrapped.calls++; return f(x); };
+        wrapped.calls = 0;
+        return wrapped;
+      };
+
+      test('a cached result is returned without calling fn again', () => {
+        const fn = counting((x) => x * 2);
+        const m = memoize(fn);
+        assert.equal(m(21), 42);
+        assert.equal(m(21), 42);
+        assert.equal(fn.calls, 1);
+      });
+      test('falsy results are cached too', () => {
+        const fn = counting(() => 0);
+        const m = memoize(fn);
+        m('a');
+        m('a');
+        assert.equal(fn.calls, 1);
+      });
+      test('never holds more than max entries', () => {
+        const m = memoize((x) => x, { max: 10 });
+        for (let i = 0; i < 1000; i++) m(i);
+        assert.equal(m.cache.size, 10);
+      });
+      test('drops the least recently used entry', () => {
+        const m = memoize((x) => x.toUpperCase(), { max: 3 });
+        m('a'); m('b'); m('c');
+        m('a');                 // a is now the most recently used
+        m('d');                 // over the limit: b goes
+        assert.deepEqual([...m.cache.keys()].sort(), ['a', 'c', 'd']);
+      });
+    </script>
+  </div>
+</body>
+</html>
