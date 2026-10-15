@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>2-1 Type Inspector</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Type inspector">
+    <script type="text/plain" class="code" data-name="typeof every type">
+      // One value of each of the 8 types, plus two special cases
+      const samples = [
+        ['42', 42],
+        ["'hello'", 'hello'],
+        ['true', true],
+        ['undefined', undefined],
+        ['null', null],
+        ['10n', 10n],
+        ["Symbol('id')", Symbol('id')],
+        ['{ a: 1 }', { a: 1 }],
+        ['[1, 2]', [1, 2]],
+        ['() => {}', () => {}],
+      ];
+
+      console.table(samples.map(([source, value]) => ({ source, typeof: typeof value })));
+    </script>
+    <script type="text/plain" class="code" data-name="Checking for null and arrays">
+      const items = [null, [], {}, 'text'];
+
+      for (const item of items) {
+        console.log(
+          item,
+          '| typeof:', typeof item,
+          '| === null:', item === null,
+          '| Array.isArray:', Array.isArray(item),
+        );
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="Numbers">
+      console.log(0.1 + 0.2);                      // not exactly 0.3
+      console.log(0.1 + 0.2 === 0.3);
+      console.log(Math.abs(0.1 + 0.2 - 0.3) < Number.EPSILON);
+
+      console.log(Number.MAX_SAFE_INTEGER);        // 2 ** 53 - 1
+      console.log(2 ** 53 === 2 ** 53 + 1);        // precision runs out
+      console.log(2n ** 53n + 1n);                 // BigInt has no limit
+
+      console.log(1 / 0, -1 / 0, 0 / 0);           // Infinity, -Infinity, NaN
+      console.log(NaN === NaN, Number.isNaN(NaN));
+      console.log(1_000_000);                      // numeric separators
+    </script>
+    <script type="text/plain" class="code" data-name="let, const and var">
+      const language = 'JavaScript';
+      let year = 1995;
+      year = 2026;                 // let can be reassigned
+      console.log(language, year);
+
+      const user = { name: 'Ada' };
+      user.name = 'Grace';         // allowed: the object changes, the binding does not
+      console.log(user);
+
+      try {
+        language = 'Java';         // not allowed: const cannot be reassigned
+      } catch (error) {
+        console.error(error.name + ': ' + error.message);
+      }
+    </script>
+  </div>
+</body>
+</html>

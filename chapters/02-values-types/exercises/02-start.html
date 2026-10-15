@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 2-2 · Start: Add Prices Without Rounding Errors</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 2-2">
+    <script type="text/plain" class="code">
+      // Prices have at most two decimal places.
+      // Fix addPrices so that 0.1 + 0.2 gives exactly 0.3.
+      function addPrices(a, b) {
+        return a + b;
+      }
+
+      console.log(addPrices(0.1, 0.2));
+    </script>
+    <script type="text/plain" class="tests">
+      test('0.1 + 0.2 is exactly 0.3', () => assert.equal(addPrices(0.1, 0.2), 0.3));
+      test('19.99 + 5.01 is exactly 25', () => assert.equal(addPrices(19.99, 5.01), 25));
+      test('0.7 + 0.1 is exactly 0.8', () => assert.equal(addPrices(0.7, 0.1), 0.8));
+      test('whole numbers still work', () => assert.equal(addPrices(2, 3), 5));
+    </script>
+  </div>
+</body>
+</html>

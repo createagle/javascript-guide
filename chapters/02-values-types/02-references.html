@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>2-2 Values and References</title>
+  <style>
+    .stage { width: min(860px, 100%); }
+    .stage > * { flex: 1 1 320px; }
+    .code-list { margin: 0; padding: 12px 12px 12px 36px; font: 13px/1.5 var(--mono); }
+    .code-list li { padding: 4px 6px; border-radius: 6px; color: var(--muted); }
+    .code-list li.done { color: var(--fg); }
+    .code-list li.current { color: var(--fg); background: color-mix(in oklch, var(--accent) 16%, transparent); font-weight: 600; }
+    #memory { width: 100%; height: auto; display: block; }
+    #memory text { fill: var(--fg); font: 13px system-ui, sans-serif; }
+    #memory .heading { fill: var(--muted); font-size: 12px; font-weight: 600; }
+    #memory .mono { font-family: var(--mono); font-size: 12.5px; }
+    #memory .name { font-weight: 600; }
+    #memory .tag { fill: var(--muted); font-size: 11px; }
+    #memory .slot { fill: var(--surface); stroke: var(--border); }
+    #memory .slot.ref { stroke: var(--accent); }
+    #memory .obj { fill: color-mix(in oklch, var(--good) 12%, transparent); stroke: var(--good); }
+    #memory .link { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+    #memory .arrowhead { fill: var(--accent); }
+    .note { margin: 12px 0 0; min-height: 3em; font-size: 14px; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <button class="btn" id="prev" type="button">Back</button>
+    <output id="counter" aria-live="polite"></output>
+    <button class="btn btn-primary" id="next" type="button">Next step</button>
+  </div>
+  <div class="stage">
+    <ol class="panel code-list" id="code"></ol>
+    <div class="panel">
+      <p class="label">Memory after the highlighted line</p>
+      <svg id="memory" role="img" aria-label="Variables and the values they hold"></svg>
+      <p class="note" id="note"></p>
+    </div>
+  </div>
+  <script>
+    // Each step is one line of code and the memory state after it runs
+    const steps = [
+      { line: 'let a = 1;', vars: [['a', 1]], objs: [], note: 'a holds the number 1 itself.' },
+      { line: 'let b = a;', vars: [['a', 1], ['b', 1]], objs: [], note: 'b gets a copy of the value 1.' },
+      { line: 'b = 2;', vars: [['a', 1], ['b', 2]], objs: [], note: 'Changing b does not touch a.' },
+      { line: "const user = { name: 'Ada' };", vars: [['a', 1], ['b', 2], ['user', '#1']], objs: [['#1', "{ name: 'Ada' }"]], note: 'The object lives on its own; user holds a reference to it.' },
+      { line: 'const alias = user;', vars: [['a', 1], ['b', 2], ['user', '#1'], ['alias', '#1']], objs: [['#1', "{ name: 'Ada' }"]], note: 'alias copies the reference, not the object. Both point to #1.' },
+      { line: "alias.name = 'Grace';", vars: [['a', 1], ['b', 2], ['user', '#1'], ['alias', '#1']], objs: [['#1', "{ name: 'Grace' }"]], note: "There is only one object, so user.name is now 'Grace' too." },
+      { line: 'const copy = { ...user };', vars: [['a', 1], ['b', 2], ['user', '#1'], ['alias', '#1'], ['copy', '#2']], objs: [['#1', "{ name: 'Grace' }"], ['#2', "{ name: 'Grace' }"]], note: 'Spreading builds a new object #2 with the same properties.' },
+      { line: "copy.name = 'Linus';", vars: [['a', 1], ['b', 2], ['user', '#1'], ['alias', '#1'], ['copy', '#2']], objs: [['#1', "{ name: 'Grace' }"], ['#2', "{ name: 'Linus' }"]], note: 'The copy changes on its own. user and alias still see #1.' },
+      { line: 'console.log(user === alias, user === copy);', vars: [['a', 1], ['b', 2], ['user', '#1'], ['alias', '#1'], ['copy', '#2']], objs: [['#1', "{ name: 'Grace' }"], ['#2', "{ name: 'Linus' }"]], note: 'Prints true false: === compares references, not contents.' },
+    ];
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.getElementById('memory');
+    const codeList = document.getElementById('code');
+    const note = document.getElementById('note');
+    const counter = document.getElementById('counter');
+    let current = 0;
+
+    for (const step of steps) {
+      const li = document.createElement('li');
+      li.textContent = step.line;
+      codeList.append(li);
+    }
+
+    function el(name, attrs, text) {
+      const node = document.createElementNS(NS, name);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function render() {
+      const step = steps[current];
+      [...codeList.children].forEach((li, i) => {
+        li.classList.toggle('done', i < current);
+        li.classList.toggle('current', i === current);
+      });
+      note.textContent = step.note;
+      counter.textContent = `Step ${current + 1} of ${steps.length}`;
+      document.getElementById('prev').disabled = current === 0;
+      document.getElementById('next').disabled = current === steps.length - 1;
+
+      const rowH = 44;
+      const height = Math.max(step.vars.length, step.objs.length * 2, 1) * rowH + 40;
+      svg.setAttribute('viewBox', `0 0 420 ${height}`);
+      svg.replaceChildren(
+        el('defs', {}),
+        el('text', { x: 10, y: 18, class: 'heading' }, 'Variables'),
+        el('text', { x: 250, y: 18, class: 'heading' }, 'Objects'),
+      );
+      svg.firstChild.append(Object.assign(el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }), {}));
+      svg.querySelector('marker').append(el('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead' }));
+
+      const objY = {};
+      step.objs.forEach(([id, text], i) => {
+        const y = 32 + i * rowH * 2;
+        objY[id] = y + 18;
+        svg.append(el('rect', { x: 250, y, width: 160, height: 36, rx: 6, class: 'obj' }));
+        svg.append(el('text', { x: 258, y: y + 23, class: 'mono' }, text));
+        svg.append(el('text', { x: 404, y: y - 4, class: 'tag', 'text-anchor': 'end' }, id));
+      });
+      step.vars.forEach(([name, value], i) => {
+        const y = 32 + i * rowH;
+        const isRef = typeof value === 'string' && value.startsWith('#');
+        svg.append(el('text', { x: 10, y: y + 23, class: 'mono name' }, name));
+        svg.append(el('rect', { x: 64, y, width: 110, height: 36, rx: 6, class: isRef ? 'slot ref' : 'slot' }));
+        svg.append(el('text', { x: 74, y: y + 23, class: 'mono' }, isRef ? '→ ' + value : String(value)));
+        if (isRef) {
+          svg.append(el('path', { d: `M174 ${y + 18} C 210 ${y + 18}, 214 ${objY[value]}, 248 ${objY[value]}`, class: 'link', 'marker-end': 'url(#arrow)' }));
+        }
+      });
+    }
+
+    document.getElementById('next').addEventListener('click', () => { current = Math.min(current + 1, steps.length - 1); render(); });
+    document.getElementById('prev').addEventListener('click', () => { current = Math.max(current - 1, 0); render(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') document.getElementById('next').click();
+      if (e.key === 'ArrowLeft') document.getElementById('prev').click();
+    });
+    render();
+  </script>
+</body>
+</html>

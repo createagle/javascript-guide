@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 2-1 · Final: Describe Any Value</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 2-1">
+    <script type="text/plain" class="code">
+      // Return a short name for the type of any value:
+      // 'null' for null, 'array' for arrays, and typeof's answer for everything else.
+      function describe(value) {
+        if (value === null) return 'null';
+        if (Array.isArray(value)) return 'array';
+        return typeof value;
+      }
+
+      console.log(describe(null), describe([1, 2]), describe('hi'));
+    </script>
+    <script type="text/plain" class="tests">
+      test("null is 'null'", () => assert.equal(describe(null), 'null'));
+      test("arrays are 'array'", () => {
+        assert.equal(describe([]), 'array');
+        assert.equal(describe([1, 2, 3]), 'array');
+      });
+      test("plain objects are still 'object'", () => assert.equal(describe({ a: 1 }), 'object'));
+      test('other types use typeof', () => {
+        assert.equal(describe(1), 'number');
+        assert.equal(describe('x'), 'string');
+        assert.equal(describe(undefined), 'undefined');
+        assert.equal(describe(1n), 'bigint');
+        assert.equal(describe(() => {}), 'function');
+      });
+    </script>
+  </div>
+</body>
+</html>
