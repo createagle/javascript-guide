@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 26-2 · Final: Update a Table in One Go</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 26-2" data-mode="dom">
+    <template class="html">
+      <table>
+        <thead><tr><th>Product</th><th>Price</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="2">Loading…</td></tr></tbody>
+      </table>
+    </template>
+    <script type="text/plain" class="code">
+      // renderRows(tbody, products) replaces the rows of the table with one row per product:
+      // the name, then the price with two decimals. The old rows (and "Loading…") must go.
+      // Change the page only once: build the rows first, then insert them in a single step.
+      const products = [
+        { name: 'Pen', price: 1.5 },
+        { name: 'Notebook', price: 4 },
+        { name: 'Backpack', price: 39.9 },
+      ];
+
+      function renderRows(tbody, products) {
+        const fragment = document.createDocumentFragment();   // not in the page: changing it costs nothing
+        for (const product of products) {
+          const tr = document.createElement('tr');
+          tr.append(document.createElement('td'), document.createElement('td'));
+          tr.cells[0].textContent = product.name;
+          tr.cells[1].textContent = product.price.toFixed(2);
+          fragment.append(tr);
+        }
+        tbody.replaceChildren(fragment);                      // one change: old rows out, new rows in
+      }
+
+      renderRows(document.querySelector('#rows'), products);
+    </script>
+    <script type="text/plain" class="tests">
+      const tbody = document.querySelector('#rows');
+      const texts = () => [...tbody.rows].map((r) => [...r.cells].map((c) => c.textContent));
+      test('one row per product, prices with two decimals', () => assert.deepEqual(texts(), [['Pen', '1.50'], ['Notebook', '4.00'], ['Backpack', '39.90']]));
+      test('rendering again replaces the rows', () => {
+        renderRows(tbody, products.slice(0, 2));
+        assert.equal(tbody.rows.length, 2);
+      });
+      test('the page changes only once per render', async () => {
+        const records = [];
+        const observer = new MutationObserver((list) => records.push(...list));
+        observer.observe(tbody, { childList: true, subtree: true, characterData: true });
+        renderRows(tbody, products);
+        await Promise.resolve();                    // observers are told in a microtask
+        observer.disconnect();
+        assert.equal(records.length, 1, `${records.length} separate changes`);
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>26-1 List Renderer</title>
+  <style>
+    .strategy { display: flex; flex-wrap: wrap; gap: 4px 14px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px 6px; font-size: 13px; }
+    .strategy legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+    .strategy label { display: flex; align-items: center; gap: 4px; }
+    .list-panel { width: min(640px, 100%); }
+    .stats { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+    .list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+    .row { display: grid; grid-template-columns: 3em 7em minmax(0, 1fr); gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; animation: appear 0.6s ease-out; }
+    .badge { font: 12px var(--mono); color: var(--muted); }
+    .note { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 0; }
+    @keyframes appear { from { background: color-mix(in srgb, var(--good) 30%, transparent); } }
+    @media (prefers-reduced-motion: reduce) { .row { animation: none; } }
+    @media (width < 420px) { .row { grid-template-columns: 2.5em minmax(0, 1fr); } .note { grid-column: 1 / -1; } }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls" id="actions">
+    <fieldset class="strategy">
+      <legend>Update by</legend>
+      <label><input type="radio" name="strategy" value="rebuild"> rebuilding every row</label>
+      <label><input type="radio" name="strategy" value="keyed" checked> reusing rows by id</label>
+    </fieldset>
+    <button class="btn" type="button" data-action="shuffle">Shuffle</button>
+    <button class="btn" type="button" data-action="sort">Sort A–Z</button>
+    <button class="btn" type="button" data-action="add">Add</button>
+    <button class="btn" type="button" data-action="remove">Remove one</button>
+    <label class="control"><input type="checkbox" id="auto"> Shuffle every 2 s</label>
+  </div>
+  <div class="panel list-panel">
+    <p class="stats" id="stats" aria-live="polite"></p>
+    <ol class="list" id="list"></ol>
+  </div>
+  <template id="row-template">
+    <li class="row">
+      <span class="badge"></span>
+      <strong class="name"></strong>
+      <input class="note" placeholder="Type a note…">
+    </li>
+  </template>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const template = $('row-template');
+    const NAMES = ['Ada', 'Grace', 'Alan', 'Barbara', 'Edsger', 'Margaret', 'Linus', 'Radia', 'Ken', 'Frances'];
+    let items = NAMES.slice(0, 6).map((name, i) => ({ id: i + 1, name }));
+    let nextId = items.length + 1;
+    let created = 0;
+    // moveBefore() moves a node without removing it first, so it keeps focus and state.
+    // Where it is missing, insertBefore() does the same move, but a focused input loses focus.
+    const canMove = 'moveBefore' in Element.prototype;
+
+    function createRow(item) {
+      const li = template.content.firstElementChild.cloneNode(true);   // a copy of the template's <li>
+      li.dataset.id = item.id;
+      li.querySelector('.badge').textContent = `#${item.id}`;
+      li.querySelector('.name').textContent = item.name;               // text, never HTML
+      li.querySelector('.note').setAttribute('aria-label', `Note for ${item.name}`);
+      created++;
+      return li;
+    }
+
+    // Strategy 1: throw every row away and build new ones (in a fragment, then one insertion)
+    function rebuild(list) {
+      const fragment = document.createDocumentFragment();
+      for (const item of items) fragment.append(createRow(item));
+      list.replaceChildren(fragment);
+    }
+
+    // Strategy 2: keep the rows that still exist, create the new ones, put them in order
+    function keyed(list) {
+      const existing = new Map([...list.children].map((li) => [li.dataset.id, li]));
+      let cursor = list.firstElementChild;
+      for (const item of items) {
+        const li = existing.get(String(item.id)) ?? createRow(item);
+        existing.delete(String(item.id));
+        if (li !== cursor) {
+          if (canMove && li.parentNode === list) list.moveBefore(li, cursor);
+          else list.insertBefore(li, cursor);
+        } else {
+          cursor = cursor.nextElementSibling;
+        }
+      }
+      for (const leftover of existing.values()) leftover.remove();
+    }
+
+    function render() {
+      const strategy = document.querySelector('input[name="strategy"]:checked').value;
+      const before = created;
+      (strategy === 'rebuild' ? rebuild : keyed)($('list'));
+      $('stats').textContent = `${items.length} rows · this update created ${created - before} new <li> · ` +
+        (strategy === 'keyed' ? `moves use ${canMove ? 'moveBefore()' : 'insertBefore() (moveBefore() is not supported here)'}` : 'notes are lost on every update');
+    }
+
+    const ACTIONS = {
+      shuffle() {
+        for (let i = items.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [items[i], items[j]] = [items[j], items[i]];
+        }
+      },
+      sort() { items.sort((a, b) => a.name.localeCompare(b.name)); },
+      add() { items.splice(Math.floor(Math.random() * (items.length + 1)), 0, { id: nextId, name: NAMES[(nextId - 1) % NAMES.length] }); nextId++; },
+      remove() { if (items.length) items.splice(Math.floor(Math.random() * items.length), 1); },
+    };
+    $('actions').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      ACTIONS[button.dataset.action]();
+      render();
+    });
+    $('actions').addEventListener('change', (event) => { if (event.target.name === 'strategy') render(); });
+    let timer = 0;
+    $('auto').addEventListener('change', () => {
+      clearInterval(timer);
+      if ($('auto').checked) timer = setInterval(() => { ACTIONS.shuffle(); render(); }, 2000);
+    });
+    render();
+  </script>
+</body>
+</html>

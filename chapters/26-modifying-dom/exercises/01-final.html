@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 26-1 · Final: Render Contacts Safely</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 26-1" data-mode="dom">
+    <template class="html">
+      <ul id="contacts"></ul>
+      <template id="contact">
+        <li class="contact"><strong class="name"></strong> <a class="email"></a></li>
+      </template>
+    </template>
+    <script type="text/plain" class="code">
+      // renderContacts(list, contacts) fills the <ul> with one <li> per contact,
+      // using the <template id="contact">: the name in .name, and in .email a mailto: link.
+      // Names come from users: they must always show up as text, never as markup.
+      const contacts = [
+        { name: 'Ada Lovelace', email: 'ada@example.com' },
+        { name: '<img src=x onerror="this.outerHTML = `HACKED`">', email: 'mallory@example.com' },
+        { name: 'Grace & "Amazing" Hopper', email: 'grace@example.com' },
+      ];
+
+      function renderContacts(list, contacts) {
+        const template = document.querySelector('#contact');
+        const items = contacts.map((contact) => {
+          const li = template.content.firstElementChild.cloneNode(true);
+          li.querySelector('.name').textContent = contact.name;        // text, so markup stays harmless
+          const link = li.querySelector('.email');
+          link.href = `mailto:${contact.email}`;
+          link.textContent = contact.email;
+          return li;
+        });
+        list.replaceChildren(...items);
+      }
+
+      renderContacts(document.querySelector('#contacts'), contacts);
+    </script>
+    <script type="text/plain" class="tests">
+      const list = document.querySelector('#contacts');
+      test('one item per contact', () => assert.equal(list.querySelectorAll('li.contact').length, 3));
+      test('names are shown exactly as text', () => {
+        assert.deepEqual([...list.querySelectorAll('.name')].map((n) => n.textContent), contacts.map((c) => c.name));
+      });
+      test('no markup was injected', () => assert.equal(list.querySelector('img'), null));
+      test('mailto links', () => {
+        const link = list.querySelector('li:first-child a.email');
+        assert.equal(link.getAttribute('href'), 'mailto:ada@example.com');
+        assert.equal(link.textContent, 'ada@example.com');
+      });
+      test('rendering again replaces the list', () => {
+        renderContacts(list, contacts.slice(0, 1));
+        assert.equal(list.children.length, 1);
+        renderContacts(list, contacts);
+      });
+    </script>
+  </div>
+</body>
+</html>

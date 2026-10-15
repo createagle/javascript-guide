@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 26-3 · Final: Reorder Without Rebuilding</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 26-3" data-mode="dom">
+    <template class="html">
+      <ul id="playlist">
+        <li data-id="a">Intro</li>
+        <li data-id="b">Verse</li>
+        <li data-id="c">Chorus</li>
+      </ul>
+    </template>
+    <script type="text/plain" class="code">
+      // syncList(ul, songs) makes the <li>s match songs ([{ id, title }]) in order:
+      // reuse the existing <li data-id> elements (moving them as needed), create <li>s for new songs,
+      // and remove the ones that are no longer in the list. Keep each <li>'s text up to date.
+      function syncList(ul, songs) {
+        const existing = new Map([...ul.children].map((li) => [li.dataset.id, li]));
+        songs.forEach((song, index) => {
+          let li = existing.get(song.id);
+          existing.delete(song.id);
+          if (!li) {
+            li = document.createElement('li');
+            li.dataset.id = song.id;
+          }
+          if (li.textContent !== song.title) li.textContent = song.title;
+          const here = ul.children[index] ?? null;
+          if (li !== here) ul.insertBefore(li, here);   // moves it if it is already in the list
+        });
+        for (const leftover of existing.values()) leftover.remove();
+      }
+
+      syncList(document.querySelector('#playlist'), [
+        { id: 'c', title: 'Chorus' }, { id: 'a', title: 'Intro' }, { id: 'd', title: 'Bridge' },
+      ]);
+    </script>
+    <script type="text/plain" class="tests">
+      const ul = document.querySelector('#playlist');
+      const order = () => [...ul.children].map((li) => `${li.dataset.id}:${li.textContent}`);
+      test('the order and texts match', () => assert.deepEqual(order(), ['c:Chorus', 'a:Intro', 'd:Bridge']));
+      test('existing elements are reused, not recreated', () => {
+        const chorus = ul.querySelector('[data-id="c"]');
+        chorus.dataset.marker = 'kept';
+        syncList(ul, [{ id: 'd', title: 'Bridge' }, { id: 'c', title: 'Chorus' }]);
+        assert.equal(ul.querySelector('[data-id="c"]'), chorus);
+        assert.equal(chorus.dataset.marker, 'kept');
+        assert.deepEqual(order(), ['d:Bridge', 'c:Chorus']);
+      });
+      test('titles are updated', () => {
+        syncList(ul, [{ id: 'd', title: 'Bridge (live)' }, { id: 'c', title: 'Chorus' }]);
+        assert.deepEqual(order(), ['d:Bridge (live)', 'c:Chorus']);
+      });
+      test('an empty list removes everything', () => {
+        syncList(ul, []);
+        assert.equal(ul.children.length, 0);
+      });
+    </script>
+  </div>
+</body>
+</html>

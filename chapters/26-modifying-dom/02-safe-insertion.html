@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>26-2 Three Ways to Insert Text</title>
+  <style>
+    .input-panel { width: min(960px, 100%); }
+    textarea { width: 100%; box-sizing: border-box; font: 13px var(--mono); padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); resize: vertical; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; width: min(960px, 100%); }
+    .pane h2 { font-size: 13px; margin: 0 0 4px; }
+    .verdict { font-size: 12px; margin: 0 0 8px; }
+    .verdict.good { color: var(--good); }
+    .verdict.bad { color: var(--bad); }
+    .out { min-height: 80px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 8px; overflow-wrap: anywhere; font-size: 15px; }
+    .frame { width: 100%; box-sizing: border-box; height: 96px; background: #fff; }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel input-panel">
+    <label class="label" for="input">Text from a user (a comment, a profile name…)</label>
+    <textarea id="input" rows="3"></textarea>
+    <div class="presets" id="presets">
+      <button class="btn" type="button" data-preset="0">Plain text</button>
+      <button class="btn" type="button" data-preset="1">Some formatting</button>
+      <button class="btn" type="button" data-preset="2">An attack</button>
+    </div>
+  </div>
+  <div class="panes">
+    <section class="panel pane">
+      <h2><code>el.textContent = text</code></h2>
+      <p class="verdict good">Safe: everything stays text</p>
+      <div class="out" id="out-text"></div>
+    </section>
+    <section class="panel pane">
+      <h2><code>el.innerHTML = text</code></h2>
+      <p class="verdict bad">Unsafe: the text becomes markup, and its code runs. Shown in a sandboxed frame, so it can't reach this page.</p>
+      <iframe class="out frame" id="out-html" title="innerHTML result" sandbox="allow-scripts"></iframe>
+    </section>
+    <section class="panel pane">
+      <h2><code>el.setHTML(text)</code></h2>
+      <p class="verdict good" id="sanitizer-note"></p>
+      <div class="out" id="out-safe"></div>
+    </section>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const PRESETS = [
+      'Thanks, this was helpful!',
+      'I <b>really</b> liked the part about <a href="https://developer.mozilla.org">MDN</a>.',
+      'Nice post <img src="x" onerror="document.body.textContent = \'Your session was sent to evil.example!\'">',
+    ];
+
+    // Fallback for browsers without the Sanitizer API: parse into an inert document,
+    // then copy over only allowed tags (and safe links), keeping the text of everything else.
+    const ALLOWED = new Set(['B', 'I', 'EM', 'STRONG', 'CODE', 'A', 'P', 'BR', 'UL', 'OL', 'LI']);
+    const DROPPED = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'IFRAME', 'OBJECT']);
+    function sanitizedFragment(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');   // nothing in it runs or loads
+      const copy = (from, to) => {
+        for (const node of from.childNodes) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            to.append(node.data);
+          } else if (node.nodeType === Node.ELEMENT_NODE && !DROPPED.has(node.tagName)) {
+            if (!ALLOWED.has(node.tagName)) {
+              copy(node, to);                   // unknown tag: keep only what is inside
+              continue;
+            }
+            const el = document.createElement(node.localName);
+            const href = node.getAttribute('href');
+            if (node.tagName === 'A' && href && /^https?:\/\//i.test(href)) el.href = href;   // no javascript: links
+            copy(node, el);
+            to.append(el);
+          }
+        }
+      };
+      const fragment = document.createDocumentFragment();
+      copy(doc.body, fragment);
+      return fragment;
+    }
+
+    const hasSetHTML = typeof Element.prototype.setHTML === 'function';
+    $('sanitizer-note').textContent = hasSetHTML
+      ? 'Safe: the built-in Sanitizer keeps harmless markup and removes scripts.'
+      : 'This browser has no setHTML() yet, so a small allowlist sanitizer stands in for it.';
+
+    function update() {
+      const text = $('input').value;
+      $('out-text').textContent = text;
+      // The innerHTML pane is a separate, sandboxed document
+      $('out-html').srcdoc = `<!doctype html><meta charset="utf-8"><style>body{font:15px system-ui;margin:8px;color:#333}</style><body>${text}`;
+      if (hasSetHTML) $('out-safe').setHTML(text);
+      else $('out-safe').replaceChildren(sanitizedFragment(text));
+    }
+    $('input').addEventListener('input', update);
+    $('presets').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-preset]');
+      if (!button) return;
+      $('input').value = PRESETS[button.dataset.preset];
+      update();
+    });
+    $('input').value = PRESETS[1];
+    update();
+  </script>
+</body>
+</html>
