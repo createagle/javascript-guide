@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 28-2 · Final: Passwords that Must Match</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 28-2" data-mode="dom">
+    <template class="html">
+      <form id="change" novalidate>
+        <label>New password <input id="password" type="password" required minlength="8"></label>
+        <label>Repeat it <input id="confirm" type="password" required></label>
+        <p id="message" role="alert"></p>
+        <button type="submit">Save</button>
+      </form>
+    </template>
+    <script type="text/plain" class="code">
+      // The browser checks required and minlength by itself. Add the rule it can't know:
+      // #confirm is invalid while it differs from #password, with the message 'The passwords do not match.'
+      // (use setCustomValidity, and re-check when either field changes).
+      // On submit: if the form is invalid, show the first invalid field's validationMessage in #message
+      // and focus that field; otherwise show 'Saved'.
+      const form = document.querySelector('#change');
+      const password = document.querySelector('#password');
+      const confirm = document.querySelector('#confirm');
+
+      function checkMatch() {
+        // An empty message means valid; any other text marks the field invalid with that message
+        confirm.setCustomValidity(confirm.value === password.value ? '' : 'The passwords do not match.');
+      }
+      form.addEventListener('input', checkMatch);       // one listener for both fields
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        checkMatch();
+        const message = document.querySelector('#message');
+        const firstInvalid = [...form.elements].find((el) => !el.checkValidity());
+        if (firstInvalid) {
+          message.textContent = firstInvalid.validationMessage;
+          firstInvalid.focus();
+        } else {
+          message.textContent = 'Saved';
+        }
+      });
+    </script>
+    <script type="text/plain" class="tests">
+      const message = document.querySelector('#message');
+      const type = (input, text) => {
+        input.value = text;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      const submit = () => form.requestSubmit();
+      test('an empty form is not saved', () => {
+        submit();
+        assert.notEqual(message.textContent, 'Saved');
+        assert.equal(document.activeElement, password);
+      });
+      test('different passwords: confirm is invalid', () => {
+        type(password, 'correct horse');
+        type(confirm, 'correct hose');
+        assert.equal(confirm.validity.customError, true);
+        assert.equal(confirm.validationMessage, 'The passwords do not match.');
+        submit();
+        assert.equal(message.textContent, 'The passwords do not match.');
+        assert.equal(document.activeElement, confirm);
+      });
+      test('changing the first field re-checks', () => {
+        type(password, 'correct hose');
+        assert.equal(confirm.validity.valid, true);
+      });
+      test('matching passwords are saved', () => {
+        submit();
+        assert.equal(message.textContent, 'Saved');
+      });
+    </script>
+  </div>
+</body>
+</html>

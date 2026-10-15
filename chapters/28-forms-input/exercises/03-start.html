@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 28-3 · Start: Match Keyboard Shortcuts</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 28-3" data-mode="dom">
+    <template class="html">
+      <p>Shortcuts are tested with synthetic KeyboardEvent objects.</p>
+    </template>
+    <script type="text/plain" class="code">
+      // matches(event, shortcut) says whether a keydown event is the given shortcut, such as
+      // 'Ctrl+K', 'Shift+?', 'Alt+ArrowUp' or 'Escape'. Rules:
+      // - modifiers must match exactly: 'Ctrl+K' is not Ctrl+Shift+K
+      // - letters compare without case: 'Ctrl+K' matches key 'k'
+      // - 'Mod' means Meta on Apple devices and Ctrl elsewhere (isApple is given)
+      // - Shift is ignored for symbols you need Shift to type, like '?': only list it if you write it
+      const isApple = false;
+
+      function matches(event, shortcut) {
+        const parts = shortcut.split('+');
+        const key = parts.at(-1);
+        return event.key === key;
+      }
+
+      const press = (key, mods = {}) => new KeyboardEvent('keydown', { key, ...mods });
+      console.log(matches(press('k', { ctrlKey: true }), 'Ctrl+K'));
+    </script>
+    <script type="text/plain" class="tests">
+      test('Ctrl+K', () => {
+        assert.equal(matches(press('k', { ctrlKey: true }), 'Ctrl+K'), true);
+        assert.equal(matches(press('K', { ctrlKey: true, shiftKey: true }), 'Ctrl+K'), false, 'extra Shift');
+        assert.equal(matches(press('k'), 'Ctrl+K'), false, 'no Ctrl');
+      });
+      test('named keys', () => {
+        assert.equal(matches(press('Escape'), 'Escape'), true);
+        assert.equal(matches(press('ArrowUp', { altKey: true }), 'Alt+ArrowUp'), true);
+        assert.equal(matches(press('ArrowUp'), 'Alt+ArrowUp'), false);
+      });
+      test('Mod is Ctrl here', () => {
+        assert.equal(matches(press('s', { ctrlKey: true }), 'Mod+S'), true);
+        assert.equal(matches(press('s', { metaKey: true }), 'Mod+S'), false);
+      });
+      test('symbols that need Shift', () => {
+        assert.equal(matches(press('?', { shiftKey: true }), '?'), true);
+        assert.equal(matches(press('?', { shiftKey: true, ctrlKey: true }), '?'), false);
+      });
+    </script>
+  </div>
+</body>
+</html>

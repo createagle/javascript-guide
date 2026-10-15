@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>28-1 Sign-up Form with Live Validation</title>
+  <style>
+    .signup, .result { width: min(520px, 100%); }
+    .signup { display: grid; gap: 12px; }
+    .field { display: grid; gap: 4px; margin: 0; }
+    .field label, .field legend { font-size: 14px; font-weight: 600; }
+    .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+    .field input:not([type="checkbox"]) { font: inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); }
+    .field input[aria-invalid="true"] { border-color: var(--bad); }
+    .field input:user-valid { border-color: var(--good); }
+    .error { margin: 0; min-height: 1.3em; font-size: 12px; color: var(--bad); }
+    .topics { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+    .topics label, .check { font-weight: 400; display: flex; align-items: center; gap: 6px; }
+    .result pre.code { font-size: 12px; margin: 0; }
+  </style>
+</head>
+<body class="demo">
+  <form class="panel signup" id="signup" novalidate>
+    <div class="field">
+      <label for="name">Name</label>
+      <input id="name" name="name" required minlength="2" autocomplete="name" aria-describedby="name-error">
+      <p class="error" id="name-error"></p>
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required autocomplete="email" aria-describedby="email-error">
+      <p class="error" id="email-error"></p>
+    </div>
+    <div class="field">
+      <label for="password">Password <span class="hint">(8+ characters, with a digit)</span></label>
+      <input id="password" name="password" type="password" required minlength="8" pattern=".*\d.*" autocomplete="new-password" aria-describedby="password-error">
+      <p class="error" id="password-error"></p>
+    </div>
+    <div class="field">
+      <label for="confirm">Repeat the password</label>
+      <input id="confirm" name="confirm" type="password" required autocomplete="new-password" aria-describedby="confirm-error">
+      <p class="error" id="confirm-error"></p>
+    </div>
+    <div class="field">
+      <label for="age">Age</label>
+      <input id="age" name="age" type="number" required min="13" max="120" inputmode="numeric" aria-describedby="age-error">
+      <p class="error" id="age-error"></p>
+    </div>
+    <fieldset class="field topics">
+      <legend>Interests</legend>
+      <label><input type="checkbox" name="topics" value="js" checked> JavaScript</label>
+      <label><input type="checkbox" name="topics" value="css"> CSS</label>
+      <label><input type="checkbox" name="topics" value="a11y"> Accessibility</label>
+    </fieldset>
+    <div class="field">
+      <label class="check"><input id="terms" name="terms" type="checkbox" required aria-describedby="terms-error"> I accept the terms</label>
+      <p class="error" id="terms-error"></p>
+    </div>
+    <button class="btn btn-primary" type="submit">Sign up</button>
+  </form>
+  <div class="panel result" id="result" hidden>
+    <p class="label">What would be sent (Object.fromEntries is not enough for the checkboxes)</p>
+    <pre class="code" id="data"></pre>
+  </div>
+  <script type="module">
+    const form = document.getElementById('signup');
+    const touched = new Set();            // fields the user has left at least once
+
+    // Our own wording for each kind of problem; validity says which kind it is
+    function messageFor(input) {
+      const v = input.validity;
+      if (v.valueMissing) return input.type === 'checkbox' ? 'Please tick this box to continue.' : 'This field is required.';
+      if (v.typeMismatch) return 'Enter an email address like ada@example.com.';
+      if (v.tooShort) return `Use at least ${input.minLength} characters (now ${input.value.length}).`;
+      if (v.patternMismatch) return 'Include at least one digit.';
+      if (v.rangeUnderflow) return `You must be at least ${input.min}.`;
+      if (v.rangeOverflow) return `Enter an age up to ${input.max}.`;
+      if (v.badInput) return 'Enter a number.';
+      if (v.customError) return input.validationMessage;
+      return '';
+    }
+
+    function check(input) {
+      // A rule the attributes can't express: the two passwords must match
+      if (input.id === 'confirm' || input.id === 'password') {
+        const confirm = form.elements.confirm;
+        confirm.setCustomValidity(confirm.value && confirm.value !== form.elements.password.value ? 'The passwords do not match.' : '');
+      }
+      const show = touched.has(input.name);
+      const message = input.checkValidity() ? '' : messageFor(input);
+      input.setAttribute('aria-invalid', String(show && message !== ''));
+      document.getElementById(`${input.id}-error`).textContent = show ? message : '';
+    }
+    const fields = () => [...form.elements].filter((el) => el.id && document.getElementById(`${el.id}-error`));
+
+    // input: every keystroke (only re-check fields already left once); focusout: leaving a field (bubbles, unlike blur)
+    form.addEventListener('input', (event) => {
+      if (!fields().includes(event.target)) return;     // the interest checkboxes have no rules
+      check(event.target);
+      if (event.target.id === 'password') check(form.elements.confirm);
+    });
+    form.addEventListener('focusout', (event) => {
+      if (!fields().includes(event.target)) return;
+      touched.add(event.target.name);
+      check(event.target);
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      for (const input of fields()) {
+        touched.add(input.name);
+        check(input);
+      }
+      const firstInvalid = fields().find((input) => !input.validity.valid);
+      if (firstInvalid) {
+        firstInvalid.focus();               // take the user to the first problem
+        document.getElementById('result').hidden = true;
+        return;
+      }
+      const data = new FormData(form);
+      const entries = Object.fromEntries(data);   // keeps only the last value of a repeated name
+      entries.topics = data.getAll('topics');      // every ticked checkbox
+      entries.password = entries.confirm = '••••••••';
+      document.getElementById('data').textContent = JSON.stringify(entries, null, 2);
+      document.getElementById('result').hidden = false;
+    });
+  </script>
+</body>
+</html>

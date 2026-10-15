@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 28-1 · Start: Turn a Form into Data</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 28-1" data-mode="dom">
+    <template class="html">
+      <form id="order">
+        <input name="name" value="Ada">
+        <input name="quantity" type="number" value="3">
+        <input name="note" value="">
+        <label><input type="checkbox" name="extras" value="gift-wrap" checked> Gift wrap</label>
+        <label><input type="checkbox" name="extras" value="express" checked> Express</label>
+        <label><input type="checkbox" name="extras" value="insurance"> Insurance</label>
+        <select name="size"><option>S</option><option selected>M</option></select>
+        <input name="newsletter" type="checkbox">
+      </form>
+    </template>
+    <script type="text/plain" class="code">
+      // formToObject(form) returns the form's data as a plain object:
+      // - fields named in `multiple` become arrays of every value (even when empty)
+      // - number inputs become numbers
+      // - empty text fields are left out
+      // - an unticked checkbox is left out (FormData already does that)
+      function formToObject(form, { multiple = [] } = {}) {
+        return Object.fromEntries(new FormData(form));
+      }
+
+      console.log(formToObject(document.querySelector('#order'), { multiple: ['extras'] }));
+    </script>
+    <script type="text/plain" class="tests">
+      const form = document.querySelector('#order');
+      test('the whole form', () => assert.deepEqual(formToObject(form, { multiple: ['extras'] }), {
+        name: 'Ada', quantity: 3, size: 'M', extras: ['gift-wrap', 'express'],
+      }));
+      test('no extras ticked gives []', () => {
+        for (const box of form.querySelectorAll('[name="extras"]')) box.checked = false;
+        assert.deepEqual(formToObject(form, { multiple: ['extras'] }).extras, []);
+      });
+      test('a ticked checkbox without a value sends "on"', () => {
+        form.elements.newsletter.checked = true;
+        assert.equal(formToObject(form).newsletter, 'on');
+      });
+      test('numbers are numbers', () => {
+        form.elements.quantity.value = '12';
+        assert.equal(formToObject(form).quantity, 12);
+      });
+    </script>
+  </div>
+</body>
+</html>

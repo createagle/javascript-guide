@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>28-2 Keyboard and Pointer Event Viewer</title>
+  <style>
+    .pad-panel, .table-panel { width: min(820px, 100%); }
+    .pad { min-height: 130px; display: grid; place-items: center; text-align: center; padding: 16px; border: 2px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: 14px; touch-action: none; user-select: none; }
+    .pad:focus { outline: none; border-color: var(--accent); color: var(--fg); }
+    .ime { display: grid; gap: 4px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .ime input { font: inherit; font-size: 15px; color: var(--fg); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
+    table { border-collapse: collapse; width: 100%; font: 12px/1.5 var(--mono); }
+    th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+    th { color: var(--muted); font-weight: 600; }
+    td:first-child { white-space: nowrap; font-weight: 600; width: 1%; }
+    tr.is-key td:first-child { color: var(--accent); }
+    tr.is-pointer td:first-child { color: var(--good); }
+    tr.is-ime td:first-child { color: var(--warn); }
+    tr.is-clip td:first-child { color: var(--bad); }
+    tbody:empty::before { content: "No events yet"; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel pad-panel">
+    <div class="pad" id="pad" tabindex="0" role="application" aria-label="Event pad: focus it, then type, click, draw or paste">
+      Click here, then type, press keys with Shift / Ctrl / Alt, draw with the mouse, a pen or a finger, or paste.
+    </div>
+    <label class="ime">An input box for IME typing (e.g. Chinese pinyin):
+      <input id="ime" autocomplete="off"></label>
+    <div class="row">
+      <label class="control"><input type="checkbox" id="moves"> log pointermove</label>
+      <button class="btn" id="clear" type="button">Clear</button>
+    </div>
+  </div>
+  <div class="panel table-panel">
+    <table>
+      <thead><tr><th scope="col">event</th><th scope="col">details</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const MAX_ROWS = 14;
+
+    function log(type, details, kind = '') {
+      const tr = document.createElement('tr');
+      tr.className = kind;
+      tr.append(
+        Object.assign(document.createElement('td'), { textContent: type }),
+        Object.assign(document.createElement('td'), { textContent: details }),
+      );
+      $('rows').prepend(tr);
+      while ($('rows').children.length > MAX_ROWS) $('rows').lastElementChild.remove();
+    }
+    const mods = (e) => ['ctrlKey', 'shiftKey', 'altKey', 'metaKey'].filter((m) => e[m]).map((m) => m.replace('Key', '')).join('+') || 'none';
+
+    function onKey(event) {
+      // key: what the key means (depends on layout and Shift); code: which physical key it is
+      log(event.type, `key: ${JSON.stringify(event.key)} · code: ${event.code} · modifiers: ${mods(event)}` +
+        `${event.repeat ? ' · repeat' : ''}${event.isComposing ? ' · isComposing (IME)' : ''}`, 'is-key');
+      // Arrow keys and Space would scroll the page; inside the pad they shouldn't
+      if (event.type === 'keydown' && event.currentTarget === $('pad') && [' ', 'ArrowUp', 'ArrowDown'].includes(event.key)) event.preventDefault();
+    }
+    for (const type of ['keydown', 'keyup']) {
+      $('pad').addEventListener(type, onKey);
+      $('ime').addEventListener(type, onKey);
+    }
+    for (const type of ['compositionstart', 'compositionupdate', 'compositionend']) {
+      $('ime').addEventListener(type, (event) => log(type, `data: ${JSON.stringify(event.data)}`, 'is-ime'));
+    }
+    $('ime').addEventListener('input', (event) => log('input', `inputType: ${event.inputType} · data: ${JSON.stringify(event.data)} · isComposing: ${event.isComposing}`, 'is-ime'));
+
+    function onPointer(event) {
+      if (event.type === 'pointermove' && !$('moves').checked) return;
+      const rect = $('pad').getBoundingClientRect();
+      log(event.type, `pointerType: ${event.pointerType} · button: ${event.button} · buttons: ${event.buttons} · ` +
+        `x: ${Math.round(event.clientX - rect.left)}, y: ${Math.round(event.clientY - rect.top)} · pressure: ${event.pressure.toFixed(2)}`, 'is-pointer');
+      if (event.type === 'pointerdown') $('pad').setPointerCapture(event.pointerId);   // keep getting moves outside the pad
+    }
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) $('pad').addEventListener(type, onPointer);
+
+    $('pad').addEventListener('paste', (event) => {
+      event.preventDefault();
+      const text = event.clipboardData.getData('text/plain');
+      log('paste', `text/plain: ${JSON.stringify(text.slice(0, 80))} · types: ${[...event.clipboardData.types].join(', ')}`, 'is-clip');
+    });
+    $('pad').addEventListener('copy', (event) => {
+      event.preventDefault();
+      event.clipboardData.setData('text/plain', 'Copied from the event pad');
+      log('copy', 'put "Copied from the event pad" on the clipboard', 'is-clip');
+    });
+    $('clear').addEventListener('click', () => $('rows').replaceChildren());
+  </script>
+</body>
+</html>
