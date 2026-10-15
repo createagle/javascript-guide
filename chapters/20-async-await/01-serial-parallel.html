@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>20-1 Serial vs Parallel Await</title>
+  <style>
+    .setup, .timeline { width: min(860px, 100%); }
+    .setup table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    .setup th, .setup td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    .setup thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .setup tbody th { font: 600 13px var(--mono); width: 6em; }
+    .setup td { display: flex; align-items: center; gap: 8px; }
+    .setup input[type="range"] { flex: 1; min-width: 80px; }
+    .setup output { font: 12px var(--mono); min-width: 5.5em; }
+    .ops { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ops .btn { font-family: var(--mono); font-size: 12px; }
+    .ops .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    .timeline pre.code { font-size: 12px; margin-bottom: 12px; }
+    .tracks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .tracks li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) 8.5em; gap: 10px; align-items: center; font-size: 13px; }
+    .tracks .name { font: 600 13px var(--mono); overflow-wrap: anywhere; }
+    .track { position: relative; height: 18px; background: var(--surface); border-radius: 4px; }
+    .bar { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--muted); border-radius: 4px; }
+    .bar.ok { background: var(--good); }
+    .combined { border-top: 1px dashed var(--border); padding-top: 8px; }
+    .marker { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--accent); }
+    .state { font: 12px var(--mono); color: var(--muted); }
+    .result { margin: 14px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+    .result.good { color: var(--good); }
+    .result.bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel setup">
+    <table>
+      <thead><tr><th scope="col">Task</th><th scope="col">Takes</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="controls">
+    <span class="control">Wait for the tasks with</span>
+    <span class="ops" id="ops" role="group" aria-label="Pattern"></span>
+    <button class="btn btn-primary" id="run" type="button">Run</button>
+  </div>
+  <div class="panel timeline">
+    <pre class="code" id="code"></pre>
+    <ol class="tracks" id="tracks"></ol>
+    <p class="result" id="result" aria-live="polite">Press Run.</p>
+  </div>
+  <script type="module">
+    const TASKS = [
+      { name: 'user', ms: 800 },
+      { name: 'posts', ms: 500 },
+      { name: 'comments', ms: 1100 },
+    ];
+    const $ = (id) => document.getElementById(id);
+
+    // A fake request that records when it started and finished
+    const load = (task) => new Promise((resolve) => {
+      task.started = performance.now();
+      setTimeout(() => {
+        task.finished = performance.now();
+        resolve(task.name);
+      }, task.ms);
+    });
+
+    async function oneByOne(tasks) {
+      const results = [];
+      for (const task of tasks) {
+        results.push(await load(task));   // the next task starts only after this one ends
+      }
+      return results;
+    }
+
+    async function all(tasks) {
+      // Start every task first, then wait for all of them
+      return Promise.all(tasks.map((task) => load(task)));
+    }
+
+    async function forEachAsync(tasks) {
+      tasks.forEach(async (task) => {
+        await load(task);   // forEach ignores the promise this callback returns
+      });
+    }
+
+    const PATTERNS = { 'for…of + await': oneByOne, 'Promise.all': all, 'forEach + async': forEachAsync };
+    let pattern = 'for…of + await';
+
+    // Show the real source of the chosen function, without the module's indentation
+    const source = (fn) => fn.toString().replace(/^ {4}/gm, '');
+
+    TASKS.forEach((task) => {
+      const tr = document.createElement('tr');
+      const th = Object.assign(document.createElement('th'), { scope: 'row', textContent: task.name });
+      const td = document.createElement('td');
+      const range = Object.assign(document.createElement('input'), { type: 'range', min: 100, max: 2000, step: 100, value: task.ms });
+      range.setAttribute('aria-label', `${task.name} takes (ms)`);
+      const out = Object.assign(document.createElement('output'), { textContent: `${task.ms} ms` });
+      range.addEventListener('input', () => { task.ms = range.valueAsNumber; out.textContent = `${task.ms} ms`; });
+      td.append(range, out);
+      tr.append(th, td);
+      $('rows').append(tr);
+    });
+    for (const name of Object.keys(PATTERNS)) {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: name });
+      $('ops').append(button);
+    }
+    $('ops').addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      pattern = button.textContent;
+      showCode();
+    });
+    function showCode() {
+      for (const b of $('ops').children) b.setAttribute('aria-pressed', String(b.textContent === pattern));
+      $('code').textContent = source(PATTERNS[pattern]);
+    }
+
+    async function run() {
+      $('run').disabled = true;
+      $('ops').inert = true;
+      const sum = TASKS.reduce((total, t) => total + t.ms, 0);
+      const longest = Math.max(...TASKS.map((t) => t.ms));
+      const scale = sum + 200;                 // the same scale for every pattern, so runs compare
+      const tasks = TASKS.map((t) => ({ ...t, started: undefined, finished: undefined }));
+      const rows = tasks.map((task) => {
+        const li = document.createElement('li');
+        li.innerHTML = '<span class="name"></span><span class="track"><span class="bar"></span></span><span class="state">waiting</span>';
+        li.querySelector('.name').textContent = task.name;
+        return { task, li, bar: li.querySelector('.bar'), state: li.querySelector('.state') };
+      });
+      const doneLi = document.createElement('li');
+      doneLi.className = 'combined';
+      doneLi.innerHTML = '<span class="name">await</span><span class="track"><span class="marker" hidden></span></span><span class="state">pending</span>';
+      $('tracks').replaceChildren(...rows.map((r) => r.li), doneLi);
+      $('result').textContent = '…';
+      $('result').className = 'result';
+
+      const start = performance.now();
+      let frame;
+      const draw = () => {
+        const now = performance.now();
+        for (const { task, bar, state } of rows) {
+          if (task.started === undefined) continue;
+          const from = task.started - start;
+          const to = (task.finished ?? now) - start;
+          bar.style.left = `${from / scale * 100}%`;
+          bar.style.width = `${Math.max(0, to - from) / scale * 100}%`;
+          bar.classList.toggle('ok', task.finished !== undefined);
+          state.textContent = task.finished === undefined ? 'running' : `${Math.round(from)}–${Math.round(to)} ms`;
+        }
+        frame = requestAnimationFrame(draw);
+      };
+      draw();
+
+      const results = await PATTERNS[pattern](tasks);
+      const at = performance.now() - start;
+      const marker = doneLi.querySelector('.marker');
+      marker.hidden = false;
+      marker.style.left = `${at / scale * 100}%`;
+      doneLi.querySelector('.state').textContent = `${Math.round(at)} ms`;
+      const unfinished = tasks.filter((t) => t.finished === undefined).length;
+      $('result').textContent = unfinished
+        ? `await returned after ${Math.round(at)} ms with ${JSON.stringify(results)}, while ${unfinished} task(s) were still running.`
+        : `await returned after ${Math.round(at)} ms with ${JSON.stringify(results)}. The tasks add up to ${sum} ms; the longest takes ${longest} ms.`;
+      $('result').classList.add(unfinished ? 'bad' : 'good');
+
+      // Keep drawing until every task has finished
+      while (tasks.some((t) => t.finished === undefined)) await new Promise((resolve) => setTimeout(resolve, 50));
+      draw();
+      cancelAnimationFrame(frame);
+      $('run').disabled = false;
+      $('ops').inert = false;
+    }
+    $('run').addEventListener('click', run);
+    showCode();
+  </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 20-2 · Start: Run at Most N at a Time</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 20-2">
+    <script type="text/plain" class="code">
+      // mapLimit(items, limit, fn) calls the async fn(item) for every item, with at most `limit`
+      // calls in flight at once, and resolves to the results in input order.
+      // If any call rejects, the returned promise rejects.
+      async function mapLimit(items, limit, fn) {
+        return Promise.all(items.map((item) => fn(item)));
+      }
+
+      const download = (name) => new Promise((resolve) => setTimeout(() => resolve(`${name}.jpg`), 50));
+      console.log(await mapLimit(['a', 'b', 'c', 'd', 'e'], 2, download));
+    </script>
+    <script type="text/plain" class="tests">
+      // A task that remembers how many calls were in flight at most
+      function tracker(ms = 30) {
+        const stats = { active: 0, max: 0 };
+        const fn = async (x) => {
+          stats.active++;
+          stats.max = Math.max(stats.max, stats.active);
+          await new Promise((resolve) => setTimeout(resolve, ms * (x % 3 + 1)));
+          stats.active--;
+          return x * 10;
+        };
+        return { fn, stats };
+      }
+      test('keeps the input order', async () => {
+        const { fn } = tracker();
+        assert.deepEqual(await mapLimit([1, 2, 3, 4, 5], 2, fn), [10, 20, 30, 40, 50]);
+      });
+      test('never runs more than limit at once', async () => {
+        const { fn, stats } = tracker();
+        await mapLimit([1, 2, 3, 4, 5, 6, 7], 3, fn);
+        assert.equal(stats.max, 3);
+      });
+      test('still runs in parallel', async () => {
+        const start = Date.now();
+        await mapLimit([0, 0, 0, 0, 0, 0], 3, tracker(40).fn);
+        const took = Date.now() - start;
+        assert.ok(took < 180, `took ${took} ms: 6 tasks of 40 ms, 3 at a time, need about 80 ms`);
+      });
+      test('an empty list gives []', async () => assert.deepEqual(await mapLimit([], 2, tracker().fn), []));
+      test('rejects when a call rejects', async () => {
+        const fn = async (x) => { if (x === 2) throw new Error('bad item'); return x; };
+        await assert.rejects(mapLimit([1, 2, 3], 2, fn), /bad item/);
+      });
+    </script>
+  </div>
+</body>
+</html>

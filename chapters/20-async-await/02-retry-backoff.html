@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>20-2 Retry with Exponential Backoff</title>
+  <style>
+    .settings { width: min(860px, 100%); display: flex; flex-wrap: wrap; gap: 10px 24px; }
+    .settings .control { flex-wrap: wrap; color: var(--fg); }
+    .settings select { max-width: 100%; font-size: 13px; }
+    .settings output { font: 12px var(--mono); }
+    .log-panel { width: min(860px, 100%); }
+    .log { list-style: none; margin: 0; padding: 0; font: 13px/1.7 var(--mono); }
+    .log:empty { display: none; }
+    .log li { overflow-wrap: anywhere; }
+    .log .time { color: var(--muted); white-space: pre; }
+    .log .good { color: var(--good); }
+    .log .bad { color: var(--bad); }
+    .log .wait { color: var(--muted); font-style: italic; }
+    .result { margin: 12px 0; font-weight: 600; }
+    .result.good { color: var(--good); }
+    .result.bad { color: var(--bad); }
+    details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+    details pre.code { font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body class="demo">
+  <form class="panel settings" id="settings">
+    <label class="control">The service fails the first
+      <input type="range" id="failures" min="0" max="6" value="2"><output for="failures"></output> call(s)</label>
+    <label class="control">with
+      <select class="btn" id="status">
+        <option value="503">503 Service Unavailable (worth retrying)</option>
+        <option value="404">404 Not Found (not worth retrying)</option>
+      </select></label>
+    <label class="control">Attempts at most
+      <input type="range" id="attempts" min="1" max="6" value="4"><output for="attempts"></output></label>
+    <label class="control">Base delay
+      <input type="range" id="base" min="100" max="1000" step="100" value="200"><output for="base"></output></label>
+    <label class="control"><input type="checkbox" id="jitter"> Random jitter</label>
+  </form>
+  <div class="controls">
+    <button class="btn btn-primary" id="run" type="button">Call the service</button>
+    <button class="btn" id="cancel" type="button" disabled>Cancel</button>
+  </div>
+  <div class="panel log-panel">
+    <ol class="log" id="log" aria-live="polite"></ol>
+    <p class="result" id="result">Press “Call the service”.</p>
+    <details>
+      <summary>The code</summary>
+      <pre class="code" id="code"></pre>
+    </details>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // A delay that an AbortSignal can cut short
+    const sleep = (ms, signal) => new Promise((resolve, reject) => {
+      signal?.throwIfAborted();
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      }, { once: true });
+    });
+
+    async function retry(fn, { attempts = 4, baseDelay = 200, jitter = false, signal, onRetry } = {}) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await fn(attempt);      // await here, or the catch below never sees the rejection
+        } catch (error) {
+          const retryable = error.status === undefined || error.status >= 500;
+          if (attempt >= attempts || !retryable || signal?.aborted) throw error;
+          // 200, 400, 800 … ms; jitter spreads clients out so they don't retry in lockstep
+          const delay = baseDelay * 2 ** (attempt - 1);
+          const wait = jitter ? Math.random() * delay : delay;
+          onRetry?.({ attempt, error, wait });
+          await sleep(wait, signal);
+        }
+      }
+    }
+
+    $('code').textContent = `const sleep = ${sleep.toString().replace(/^ {4}/gm, '')};\n\n${retry.toString().replace(/^ {4}/gm, '')}`;
+
+    // Keep each <output> in step with its range (event delegation on the form)
+    const units = { failures: '', attempts: '', base: ' ms' };
+    const sync = () => { for (const id of Object.keys(units)) $(id).nextElementSibling.textContent = $(id).value + units[id]; };
+    $('settings').addEventListener('input', sync);
+    sync();
+
+    let controller;
+    let start;
+    const stamp = () => `${String(Math.round(performance.now() - start)).padStart(5)} ms`;
+    function log(text, kind = '') {
+      const li = Object.assign(document.createElement('li'), { className: kind });
+      const time = Object.assign(document.createElement('span'), { className: 'time', textContent: stamp() });
+      li.append(time, ` ${text}`);
+      $('log').append(li);
+    }
+
+    async function call() {
+      const failures = $('failures').valueAsNumber;
+      const status = Number($('status').value);
+      let calls = 0;
+      // The fake service: every call takes 300 ms
+      const service = async (attempt) => {
+        calls += 1;
+        log(`attempt ${attempt}: request sent`);
+        await sleep(300, controller.signal);
+        if (calls <= failures) {
+          const error = new Error(status === 503 ? 'Service Unavailable' : 'Not Found');
+          error.status = status;
+          log(`attempt ${attempt}: ${status} ${error.message}`, 'bad');
+          throw error;
+        }
+        log(`attempt ${attempt}: 200 OK`, 'good');
+        return { ok: true, attempt };
+      };
+
+      controller = new AbortController();
+      start = performance.now();
+      $('log').replaceChildren();
+      $('run').disabled = true;
+      $('cancel').disabled = false;
+      $('result').className = 'result';
+      $('result').textContent = '…';
+      try {
+        const result = await retry(service, {
+          attempts: $('attempts').valueAsNumber,
+          baseDelay: $('base').valueAsNumber,
+          jitter: $('jitter').checked,
+          signal: controller.signal,
+          onRetry: ({ attempt, wait }) => log(`waiting ${Math.round(wait)} ms before attempt ${attempt + 1}`, 'wait'),
+        });
+        $('result').textContent = `Succeeded on attempt ${result.attempt}, after ${stamp().trim()}.`;
+        $('result').classList.add('good');
+      } catch (error) {
+        $('result').textContent = error.name === 'AbortError'
+          ? `Cancelled after ${stamp().trim()}.`
+          : error.status < 500
+            ? `Gave up at once: ${error.status} will not change by asking again.`
+            : `Gave up after ${calls} attempt(s): ${error.status} ${error.message}.`;
+        $('result').classList.add('bad');
+      } finally {
+        $('run').disabled = false;
+        $('cancel').disabled = true;
+      }
+    }
+    $('run').addEventListener('click', call);
+    $('cancel').addEventListener('click', () => controller.abort());
+  </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 20-3 · Start: Page Through an API</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 20-3">
+    <script type="text/plain" class="code">
+      // fetchPage(cursor) resolves to { items, next }: next is the cursor of the following page,
+      // or null on the last page. The first page has the cursor null.
+      const PAGES = { null: { items: ['a', 'b'], next: 'p2' }, p2: { items: ['c', 'd'], next: 'p3' }, p3: { items: ['e'], next: null } };
+      const fetchPage = (cursor) => new Promise((resolve) => setTimeout(() => resolve(PAGES[cursor]), 20));
+
+      // allItems(fetchPage) should yield every item of every page, one at a time,
+      // fetching a page only when the consumer asks for more.
+      async function* allItems(fetchPage) {
+        const page = await fetchPage(null);
+        yield page.items;
+      }
+
+      for await (const item of allItems(fetchPage)) console.log(item);
+      console.log(await Array.fromAsync(allItems(fetchPage)));
+    </script>
+    <script type="text/plain" class="tests">
+      test('yields every item of every page', async () => assert.deepEqual(await Array.fromAsync(allItems(fetchPage)), ['a', 'b', 'c', 'd', 'e']));
+      test('fetches pages only when needed', async () => {
+        const asked = [];
+        const counting = (cursor) => { asked.push(cursor); return fetchPage(cursor); };
+        for await (const item of allItems(counting)) {
+          if (item === 'c') break;            // stop in the middle of page 2
+        }
+        assert.deepEqual(asked, [null, 'p2']);
+      });
+      test('copes with an empty page', async () => {
+        const pages = { null: { items: [], next: 'x' }, x: { items: [1], next: null } };
+        const fetchSparse = async (cursor) => pages[cursor];
+        assert.deepEqual(await Array.fromAsync(allItems(fetchSparse)), [1]);
+      });
+      test('is an async iterator', () => {
+        const it = allItems(fetchPage);
+        assert.equal(typeof it[Symbol.asyncIterator], 'function');
+        assert.equal(typeof it.next, 'function');
+      });
+    </script>
+  </div>
+</body>
+</html>

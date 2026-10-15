@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 20-1 · Final: Fix an Async Function</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 20-1">
+    <script type="text/plain" class="code">
+      // Fake back-end calls. getUser(0) rejects; render() fails for user 2.
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      async function getUser(id) {
+        await wait(30);
+        if (id === 0) throw new Error('No such user');
+        return { id, name: id === 2 ? 'Grace' : 'Ada' };
+      }
+      async function getSettings(user) {
+        await wait(80);
+        return { theme: user.id === 2 ? 'light' : 'dark' };
+      }
+      async function getNotifications(user) {
+        await wait(80);
+        return [`Welcome back, ${user.name}`];
+      }
+      async function render({ user, settings, notifications }) {
+        await wait(10);
+        if (user.id === 2) throw new Error('Render failed');
+        return `${user.name} · ${settings.theme} · ${notifications.length} notification(s)`;
+      }
+
+      // loadDashboard(id) should return the rendered text, or 'Error: <message>' if any step fails.
+      // It has three problems. Fix them; the tests also check that it takes well under 200 ms.
+      async function loadDashboard(id) {
+        try {
+          const user = await getUser(id);                 // 1. wait for the user, not its promise
+          const [settings, notifications] = await Promise.all([
+            getSettings(user),                            // 2. these two don't depend on each other
+            getNotifications(user),
+          ]);
+          return await render({ user, settings, notifications });   // 3. so the catch sees a failed render
+        } catch (error) {
+          return `Error: ${error.message}`;
+        }
+      }
+
+      console.log(await loadDashboard(1));
+    </script>
+    <script type="text/plain" class="tests">
+      test('renders the dashboard', async () => assert.equal(await loadDashboard(1), 'Ada · dark · 1 notification(s)'));
+      test('a missing user gives an error text', async () => assert.equal(await loadDashboard(0), 'Error: No such user'));
+      test('a failed render gives an error text', async () => assert.equal(await loadDashboard(2), 'Error: Render failed'));
+      test('settings and notifications load in parallel', async () => {
+        const start = Date.now();
+        await loadDashboard(1);
+        const took = Date.now() - start;
+        assert.ok(took < 170, `took ${took} ms`);
+      });
+    </script>
+  </div>
+</body>
+</html>
