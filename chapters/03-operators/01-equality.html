@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>3-1 Equality Matrix</title>
+  <style>
+    .stage { width: min(1040px, 100%); }
+    .grid-wrap { overflow-x: auto; flex: 1 1 520px; }
+    .explain { flex: 1 1 260px; }
+    .modes { border: 0; display: flex; gap: 16px; padding: 0; margin: 0; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    table { border-collapse: collapse; font: 12px var(--mono); }
+    th { padding: 2px 4px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+    thead th, tr:first-child th { height: 64px; vertical-align: bottom; }
+    tr:first-child th span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); }
+    th[scope="row"] { text-align: right; }
+    td { padding: 1px; }
+    td button { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--fg); font: 13px system-ui; cursor: pointer; padding: 0; }
+    td button.yes { background: color-mix(in oklch, var(--good) 30%, var(--bg)); border-color: var(--good); }
+    td button.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .expr { font: 600 15px var(--mono); margin: 0 0 8px; }
+    #steps { margin: 0; padding-left: 20px; font-size: 14px; }
+    #steps li { margin: 4px 0; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <fieldset class="modes">
+      <legend class="sr-only">Comparison</legend>
+      <label class="control"><input type="radio" name="mode" value="loose" checked> <code>==</code></label>
+      <label class="control"><input type="radio" name="mode" value="strict"> <code>===</code></label>
+      <label class="control"><input type="radio" name="mode" value="is"> <code>Object.is</code></label>
+    </fieldset>
+    <output id="count"></output>
+  </div>
+  <div class="stage">
+    <div class="panel grid-wrap">
+      <table id="grid"></table>
+    </div>
+    <div class="panel explain" aria-live="polite">
+      <p class="label">How the browser decides</p>
+      <p id="expr" class="expr">Pick a cell</p>
+      <ol id="steps"></ol>
+    </div>
+  </div>
+  <script>
+    // Factories, so that every comparison gets fresh objects (two [] literals are different objects)
+    const values = [
+      ['true', () => true], ['false', () => false], ['1', () => 1], ['0', () => 0], ['-0', () => -0],
+      ["'1'", () => '1'], ["'0'", () => '0'], ["''", () => ''], ["' '", () => ' '],
+      ['null', () => null], ['undefined', () => undefined], ['NaN', () => NaN],
+      ['[]', () => []], ['[0]', () => [0]], ['[1]', () => [1]], ['{}', () => ({})],
+    ];
+
+    const typeOf = (v) => (v === null ? 'null' : typeof v);
+    const show = (v) => {
+      if (typeof v === 'string') return `'${v}'`;
+      if (Object.is(v, -0)) return '-0';
+      if (Array.isArray(v)) return `[${v.join(', ')}]`;
+      if (v && typeof v === 'object') return '{}';
+      return String(v);
+    };
+    // ToPrimitive with the default hint, as == uses it
+    function toPrimitive(o) {
+      const v = o.valueOf();
+      if (v !== o && (typeof v !== 'object' || v === null)) return v;
+      return o.toString();
+    }
+
+    // Follows the IsLooselyEqual algorithm of the spec and records each step
+    function loose(x, y, steps) {
+      const tx = typeOf(x), ty = typeOf(y);
+      if (tx === ty || (tx === 'object' && ty === 'object')) {
+        const r = x === y;
+        steps.push(tx === 'object'
+          ? `Both are objects: equal only if they are the same object → ${r}`
+          : `Same type (${tx}): compare like === → ${r}` + (Number.isNaN(x) ? ' (NaN equals nothing)' : ''));
+        return r;
+      }
+      if ((tx === 'null' || tx === 'undefined') && (ty === 'null' || ty === 'undefined')) {
+        steps.push('null and undefined are == to each other, and to nothing else → true');
+        return true;
+      }
+      if (tx === 'null' || tx === 'undefined' || ty === 'null' || ty === 'undefined') {
+        steps.push(`${tx === 'null' || tx === 'undefined' ? show(x) : show(y)} is only == to null and undefined → false`);
+        return false;
+      }
+      if (tx === 'number' && ty === 'string') { const n = Number(y); steps.push(`Convert the string to a number: ${show(y)} → ${show(n)}`); return loose(x, n, steps); }
+      if (tx === 'string' && ty === 'number') { const n = Number(x); steps.push(`Convert the string to a number: ${show(x)} → ${show(n)}`); return loose(n, y, steps); }
+      if (tx === 'boolean') { const n = Number(x); steps.push(`Convert the boolean to a number: ${show(x)} → ${n}`); return loose(n, y, steps); }
+      if (ty === 'boolean') { const n = Number(y); steps.push(`Convert the boolean to a number: ${show(y)} → ${n}`); return loose(x, n, steps); }
+      if (tx === 'object') { const p = toPrimitive(x); steps.push(`Convert the object to a primitive: ${show(x)} → ${show(p)}`); return loose(p, y, steps); }
+      if (ty === 'object') { const p = toPrimitive(y); steps.push(`Convert the object to a primitive: ${show(y)} → ${show(p)}`); return loose(x, p, steps); }
+      steps.push('No rule applies → false');
+      return false;
+    }
+    function strict(x, y, steps) {
+      if (typeOf(x) !== typeOf(y) && !(typeOf(x) === 'object' && typeOf(y) === 'object')) {
+        steps.push(`Different types (${typeOf(x)} and ${typeOf(y)}) → false. === never converts.`);
+        return false;
+      }
+      const r = x === y;
+      if (Number.isNaN(x)) steps.push('NaN is never === to anything, not even NaN → false');
+      else if (typeof x === 'object' && x !== null) steps.push(`Two objects: === only if they are the same object → ${r}`);
+      else if (x === 0 && y === 0) steps.push(`=== treats 0 and -0 as equal → ${r}`);
+      else steps.push(`Same type: compare the values → ${r}`);
+      return r;
+    }
+    function same(x, y, steps) {
+      const r = Object.is(x, y);
+      if (Number.isNaN(x) && Number.isNaN(y)) steps.push('Object.is treats NaN as equal to NaN → true');
+      else if (x === 0 && y === 0) steps.push(`Object.is tells 0 and -0 apart → ${r}`);
+      else steps.push(`Like ===, with no conversion → ${r}`);
+      return r;
+    }
+    const modes = { loose: [loose, '=='], strict: [strict, '==='], is: [same, 'Object.is'] };
+
+    const grid = document.getElementById('grid');
+    const expr = document.getElementById('expr');
+    const stepsList = document.getElementById('steps');
+    let mode = 'loose';
+    let selected = [7, 3];
+
+    function compare(i, j, steps = []) {
+      return modes[mode][0](values[i][1](), values[j][1](), steps);
+    }
+    function label(i, j) {
+      const [a, b] = [values[i][0], values[j][0]];
+      return mode === 'is' ? `Object.is(${a}, ${b})` : `${a} ${modes[mode][1]} ${b}`;
+    }
+
+    function render() {
+      const head = document.createElement('tr');
+      head.append(document.createElement('th'));
+      values.forEach(([name]) => { const th = document.createElement('th'); th.scope = 'col'; th.innerHTML = `<span>${name}</span>`; head.append(th); });
+      const rows = [head];
+      let trues = 0;
+      values.forEach(([name], i) => {
+        const tr = document.createElement('tr');
+        const th = document.createElement('th');
+        th.scope = 'row';
+        th.textContent = name;
+        tr.append(th);
+        values.forEach((_, j) => {
+          const td = document.createElement('td');
+          const btn = document.createElement('button');
+          const r = compare(i, j);
+          if (r) trues++;
+          btn.type = 'button';
+          btn.className = r ? 'yes' : 'no';
+          btn.textContent = r ? '✓' : '';
+          btn.setAttribute('aria-label', `${label(i, j)} is ${r}`);
+          if (i === selected[0] && j === selected[1]) btn.classList.add('selected');
+          btn.addEventListener('click', () => { selected = [i, j]; render(); });
+          td.append(btn);
+          tr.append(td);
+        });
+        rows.push(tr);
+      });
+      grid.replaceChildren(...rows);
+      document.getElementById('count').textContent = `${trues} of ${values.length ** 2} pairs are true`;
+
+      const steps = [];
+      const r = compare(selected[0], selected[1], steps);
+      expr.textContent = `${label(...selected)} → ${r}`;
+      stepsList.replaceChildren(...steps.map((s) => Object.assign(document.createElement('li'), { textContent: s })));
+    }
+
+    document.querySelectorAll('input[name="mode"]').forEach((input) => {
+      input.addEventListener('change', () => { mode = input.value; render(); });
+    });
+    render();
+  </script>
+</body>
+</html>

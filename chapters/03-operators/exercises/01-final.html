@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 3-1 · Final: Defaults That Respect Zero</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 3-1">
+    <script type="text/plain" class="code">
+      // Return options.pageSize, or 20 when it is missing.
+      // 0 is a valid page size, and options itself may be undefined.
+      function getPageSize(options) {
+        return options?.pageSize ?? 20;
+      }
+
+      console.log(getPageSize({ pageSize: 50 }), getPageSize({}), getPageSize({ pageSize: 0 }));
+    </script>
+    <script type="text/plain" class="tests">
+      test('uses the given page size', () => assert.equal(getPageSize({ pageSize: 50 }), 50));
+      test('falls back to 20 when pageSize is missing', () => assert.equal(getPageSize({}), 20));
+      test('falls back to 20 when pageSize is null', () => assert.equal(getPageSize({ pageSize: null }), 20));
+      test('keeps 0', () => assert.equal(getPageSize({ pageSize: 0 }), 0));
+      test('works without any options', () => assert.equal(getPageSize(), 20));
+    </script>
+  </div>
+</body>
+</html>

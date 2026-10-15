@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 3-2 · Start: Parse a Quantity</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 3-2">
+    <script type="text/plain" class="code">
+      // Turn what the user typed into a whole number from 1 to 99.
+      // Return null for anything else: '', '3.5', '12abc', '0', '-2', '100'.
+      // Spaces around the number are fine: ' 12 ' gives 12.
+      function parseQuantity(input) {
+        return parseInt(input);
+      }
+
+      console.log(parseQuantity('12'), parseQuantity('12abc'), parseQuantity(''));
+    </script>
+    <script type="text/plain" class="tests">
+      test('reads plain numbers', () => {
+        assert.equal(parseQuantity('1'), 1);
+        assert.equal(parseQuantity('99'), 99);
+      });
+      test('ignores spaces around the number', () => assert.equal(parseQuantity(' 12 '), 12));
+      test('rejects an empty string', () => assert.equal(parseQuantity(''), null));
+      test('rejects text after the number', () => assert.equal(parseQuantity('12abc'), null));
+      test('rejects decimals', () => assert.equal(parseQuantity('3.5'), null));
+      test('rejects numbers out of range', () => {
+        assert.equal(parseQuantity('0'), null);
+        assert.equal(parseQuantity('-2'), null);
+        assert.equal(parseQuantity('100'), null);
+      });
+    </script>
+  </div>
+</body>
+</html>

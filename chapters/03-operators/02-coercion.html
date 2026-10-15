@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>3-2 Type Conversion Tracker</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Type conversion">
+    <script type="text/plain" class="code" data-name="+ with strings">
+      // + adds numbers, but joins as soon as either side is a string
+      console.log(1 + 2);
+      console.log('1' + 2);
+      console.log(1 + 2 + '3');      // left to right: 3 + '3'
+      console.log('1' + 2 + 3);      // '12' + 3
+
+      // The other arithmetic operators always convert to numbers
+      console.log('5' - 2, '5' * '2', '10' / '4');
+      console.log(+'42', +'', +' 7 ', +'7px');
+    </script>
+    <script type="text/plain" class="code" data-name="Explicit conversion">
+      const inputs = ['42', ' 42 ', '', '4.2e1', '0x2A', '42px', null, undefined, true, [], [7], [1, 2]];
+
+      console.table(inputs.map((input) => ({
+        input: typeof input === 'string' ? `'${input}'` : Array.isArray(input) ? `[${input}]` : String(input),
+        Number: Number(input),
+        parseInt: parseInt(input, 10),
+        String: String(input),
+        Boolean: Boolean(input),
+      })));
+    </script>
+    <script type="text/plain" class="code" data-name="Truthy and falsy">
+      // These are the only falsy values; everything else is truthy
+      const falsy = [false, 0, -0, 0n, '', null, undefined, NaN];
+      console.log(falsy.map(Boolean));
+
+      // Some surprises: all of these are truthy
+      const truthy = ['0', 'false', ' ', [], {}, () => {}, -1, Infinity];
+      console.log(truthy.map(Boolean));
+    </script>
+    <script type="text/plain" class="code" data-name="||, ?? and ?.">
+      const settings = { volume: 0, theme: '', user: null };
+
+      // || falls back on ANY falsy value, ?? only on null and undefined
+      console.log(settings.volume || 50, settings.volume ?? 50);
+      console.log(settings.theme || 'light', settings.theme ?? 'light');
+
+      // ?. stops at null or undefined instead of throwing
+      console.log(settings.user?.name);
+      console.log(settings.user?.name ?? 'Guest');
+
+      // Logical assignment
+      settings.theme ||= 'light';
+      settings.volume ??= 50;
+      console.log(settings);
+    </script>
+    <script type="text/plain" class="code" data-name="Objects to primitives">
+      const price = {
+        amount: 9.5,
+        valueOf() { return this.amount; },
+        toString() { return `$${this.amount.toFixed(2)}`; },
+      };
+
+      console.log(price * 2);          // number hint: valueOf
+      console.log(`${price}`);         // string hint: toString
+      console.log(price + '');         // default hint: valueOf first
+
+      const temperature = {
+        [Symbol.toPrimitive](hint) {
+          return hint === 'number' ? 21 : hint === 'string' ? '21 °C' : 'default';
+        },
+      };
+      console.log(+temperature, `${temperature}`, temperature + '');
+    </script>
+  </div>
+</body>
+</html>
