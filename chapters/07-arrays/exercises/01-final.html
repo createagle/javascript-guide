@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 7-1 · Final: Cart Totals</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 7-1">
+    <script type="text/plain" class="code">
+      const cart = [
+        { name: 'Tea', price: 3, qty: 2 },
+        { name: 'Cake', price: 6, qty: 1 },
+        { name: 'Coffee', price: 4.5, qty: 3 },
+      ];
+
+      // The sum of price × qty for every item
+      function cartTotal(items) {
+        return items.reduce((total, item) => total + item.price * item.qty, 0);
+      }
+
+      // The names of items whose price is at least `min`, in the same order
+      function namesFrom(items, min) {
+        return items.filter((item) => item.price >= min).map((item) => item.name);
+      }
+
+      console.log(cartTotal(cart), namesFrom(cart, 4));
+    </script>
+    <script type="text/plain" class="tests">
+      const sample = [
+        { name: 'Tea', price: 3, qty: 2 },
+        { name: 'Cake', price: 6, qty: 1 },
+        { name: 'Coffee', price: 4.5, qty: 3 },
+      ];
+      test('cartTotal adds price × qty', () => assert.equal(cartTotal(sample), 25.5));
+      test('cartTotal of an empty cart is 0', () => assert.equal(cartTotal([]), 0));
+      test('namesFrom filters and maps', () => assert.deepEqual(namesFrom(sample, 4), ['Cake', 'Coffee']));
+      test('namesFrom includes the boundary', () => assert.deepEqual(namesFrom(sample, 6), ['Cake']));
+      test('namesFrom returns an empty array when nothing matches', () => assert.deepEqual(namesFrom(sample, 100), []));
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>7-1 Array Methods at a Glance</title>
+  <style>
+    .stage { width: min(760px, 100%); }
+    .main { width: 100%; display: grid; gap: 14px; }
+    .row { display: grid; grid-template-columns: 120px 1fr auto; gap: 12px; align-items: start; }
+    @media (width < 520px) { .row { grid-template-columns: 1fr; } }
+    .row .label { margin: 6px 0 0; }
+    .tiles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .tile { min-width: 36px; padding: 6px 10px; text-align: center; border-radius: 8px; border: 1px solid var(--accent); background: color-mix(in oklch, var(--accent) 12%, transparent); font: 600 14px var(--mono); }
+    .value { font: 600 16px var(--mono); padding: 4px 0; }
+    .calls { margin: 0; padding-left: 32px; font: 13px/1.6 var(--mono); max-height: 180px; overflow: auto; }
+    .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; align-self: center; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="method">Method</label>
+    <select id="method" class="btn"></select>
+  </div>
+  <div class="stage">
+    <div class="panel main">
+      <pre class="code" id="code"></pre>
+      <div class="row"><span class="label">numbers before</span><div class="tiles" id="before"></div></div>
+      <div class="row"><span class="label">callback calls</span><ol class="calls" id="calls"></ol></div>
+      <div class="row"><span class="label">returns</span><div id="result"></div></div>
+      <div class="row"><span class="label">numbers after</span><div class="tiles" id="after"></div><span id="mutated" class="badge"></span></div>
+    </div>
+  </div>
+  <script>
+    const START = [3, 8, 1, 6, 2];
+    // Each entry: [group, code, run(numbers, log)]. log() records one callback call.
+    const methods = {
+      'map': ['New array', 'numbers.map((n) => n * 2)', (a, log) => a.map((n) => { log(`n = ${n} → ${n * 2}`); return n * 2; })],
+      'filter': ['New array', 'numbers.filter((n) => n > 2)', (a, log) => a.filter((n) => { log(`n = ${n} → ${n > 2 ? 'keep' : 'drop'}`); return n > 2; })],
+      'slice': ['New array', 'numbers.slice(1, 3)', (a) => a.slice(1, 3)],
+      'concat': ['New array', 'numbers.concat([9, 7])', (a) => a.concat([9, 7])],
+      'flatMap': ['New array', 'numbers.flatMap((n) => [n, -n])', (a, log) => a.flatMap((n) => { log(`n = ${n} → [${n}, ${-n}]`); return [n, -n]; })],
+      'toSorted': ['New array', 'numbers.toSorted((a, b) => a - b)', (a, log) => a.toSorted((x, y) => { log(`compare(${x}, ${y}) → ${x - y}`); return x - y; })],
+      'toReversed': ['New array', 'numbers.toReversed()', (a) => a.toReversed()],
+      'toSpliced': ['New array', 'numbers.toSpliced(1, 2, 0)', (a) => a.toSpliced(1, 2, 0)],
+      'with': ['New array', 'numbers.with(0, 99)', (a) => a.with(0, 99)],
+      'find': ['Search', 'numbers.find((n) => n > 5)', (a, log) => a.find((n) => { log(`n = ${n} → ${n > 5}`); return n > 5; })],
+      'findIndex': ['Search', 'numbers.findIndex((n) => n > 5)', (a, log) => a.findIndex((n) => { log(`n = ${n} → ${n > 5}`); return n > 5; })],
+      'findLast': ['Search', 'numbers.findLast((n) => n > 5)', (a, log) => a.findLast((n) => { log(`n = ${n} → ${n > 5}`); return n > 5; })],
+      'some': ['Search', 'numbers.some((n) => n > 7)', (a, log) => a.some((n) => { log(`n = ${n} → ${n > 7}`); return n > 7; })],
+      'every': ['Search', 'numbers.every((n) => n > 1)', (a, log) => a.every((n) => { log(`n = ${n} → ${n > 1}`); return n > 1; })],
+      'includes': ['Search', 'numbers.includes(6)', (a) => a.includes(6)],
+      'indexOf': ['Search', 'numbers.indexOf(6)', (a) => a.indexOf(6)],
+      'at': ['Search', 'numbers.at(-1)', (a) => a.at(-1)],
+      'reduce': ['Combine', 'numbers.reduce((sum, n) => sum + n, 0)', (a, log) => a.reduce((sum, n) => { log(`sum = ${sum}, n = ${n} → ${sum + n}`); return sum + n; }, 0)],
+      'join': ['Combine', "numbers.join(' + ')", (a) => a.join(' + ')],
+      'forEach': ['Combine', 'numbers.forEach((n) => console.log(n))', (a, log) => a.forEach((n) => log(`n = ${n} → logs ${n}`))],
+      'push': ['Mutates the array', 'numbers.push(9)', (a) => a.push(9)],
+      'pop': ['Mutates the array', 'numbers.pop()', (a) => a.pop()],
+      'shift': ['Mutates the array', 'numbers.shift()', (a) => a.shift()],
+      'unshift': ['Mutates the array', 'numbers.unshift(0)', (a) => a.unshift(0)],
+      'splice': ['Mutates the array', 'numbers.splice(1, 2, 0)', (a) => a.splice(1, 2, 0)],
+      'sort': ['Mutates the array', 'numbers.sort((a, b) => a - b)', (a, log) => a.sort((x, y) => { log(`compare(${x}, ${y}) → ${x - y}`); return x - y; })],
+      'reverse': ['Mutates the array', 'numbers.reverse()', (a) => a.reverse()],
+      'fill': ['Mutates the array', 'numbers.fill(0, 3)', (a) => a.fill(0, 3)],
+    };
+
+    const select = document.getElementById('method');
+    const groups = {};
+    for (const [name, [group]] of Object.entries(methods)) {
+      groups[group] ??= Object.assign(document.createElement('optgroup'), { label: group });
+      groups[group].append(new Option(name, name));
+    }
+    select.append(...Object.values(groups));
+
+    const tiles = (values, el) => el.replaceChildren(...values.map((v) => Object.assign(document.createElement('span'), { className: 'tile', textContent: String(v) })));
+
+    function render() {
+      const [, code, run] = methods[select.value];
+      const numbers = [...START];
+      const calls = [];
+      const result = run(numbers, (text) => calls.push(text));
+      document.getElementById('code').textContent = `const numbers = [${START.join(', ')}];\nconst result = ${code};`;
+      tiles(START, document.getElementById('before'));
+      const list = document.getElementById('calls');
+      list.replaceChildren(...(calls.length ? calls : ['(no callback)']).map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+      const out = document.getElementById('result');
+      if (Array.isArray(result)) {
+        out.className = 'tiles';
+        tiles(result, out);
+        if (result === numbers) out.append(Object.assign(document.createElement('span'), { className: 'badge warn', textContent: 'the same array object' }));
+      } else {
+        out.className = 'value';
+        out.textContent = typeof result === 'string' ? `'${result}'` : String(result);
+      }
+      tiles(numbers, document.getElementById('after'));
+      const changed = numbers.length !== START.length || numbers.some((v, i) => v !== START[i]);
+      const badge = document.getElementById('mutated');
+      badge.textContent = changed ? 'changed' : 'unchanged';
+      badge.className = 'badge ' + (changed ? 'bad' : 'good');
+    }
+    select.addEventListener('change', render);
+    render();
+  </script>
+</body>
+</html>

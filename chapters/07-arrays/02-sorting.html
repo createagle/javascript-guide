@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>7-2 Sorting and Grouping</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Sorting">
+    <script type="text/plain" class="code" data-name="The default sort">
+      // Without a compare function, sort() converts items to strings
+      console.log([10, 9, 1, 2].sort());
+      console.log([10, 9, 1, 2].sort((a, b) => a - b));   // ascending numbers
+      console.log([10, 9, 1, 2].sort((a, b) => b - a));   // descending
+
+      // The compare function returns < 0 (a first), > 0 (b first) or 0 (keep order)
+      const calls = [];
+      [3, 1, 2].sort((a, b) => {
+        calls.push(`${a} vs ${b} → ${a - b}`);
+        return a - b;
+      });
+      console.log(calls);
+    </script>
+    <script type="text/plain" class="code" data-name="Strings and locales">
+      const words = ['banana', 'apple', 'Cherry', 'éclair', 'date'];
+
+      console.log(words.toSorted());                                  // code units: capitals first
+      console.log(words.toSorted((a, b) => a.localeCompare(b)));      // human order
+      console.log(words.toSorted(new Intl.Collator('en', { sensitivity: 'base' }).compare));
+
+      const files = ['file10.txt', 'file2.txt', 'file1.txt'];
+      console.log(files.toSorted(new Intl.Collator('en', { numeric: true }).compare));
+    </script>
+    <script type="text/plain" class="code" data-name="Sorting objects by several keys">
+      const people = [
+        { name: 'Grace', team: 'B', age: 45 },
+        { name: 'Ada', team: 'A', age: 36 },
+        { name: 'Linus', team: 'B', age: 28 },
+        { name: 'Alan', team: 'A', age: 41 },
+      ];
+
+      // By team, then by age (descending) inside each team
+      const sorted = people.toSorted((a, b) =>
+        a.team.localeCompare(b.team) || b.age - a.age,
+      );
+      console.table(sorted);
+    </script>
+    <script type="text/plain" class="code" data-name="sort() mutates, toSorted() does not">
+      const scores = [42, 7, 19];
+
+      const copy = scores.toSorted((a, b) => a - b);
+      console.log(scores, copy);          // original untouched
+
+      const same = scores.sort((a, b) => a - b);
+      console.log(scores, same === scores);   // sorted in place, returns the same array
+    </script>
+    <script type="text/plain" class="code" data-name="Grouping">
+      const orders = [
+        { id: 1, status: 'paid', total: 30 },
+        { id: 2, status: 'pending', total: 12 },
+        { id: 3, status: 'paid', total: 8 },
+        { id: 4, status: 'refunded', total: 15 },
+      ];
+
+      const byStatus = Object.groupBy(orders, (order) => order.status);
+      console.log(Object.keys(byStatus));
+      console.log(byStatus.paid.map((o) => o.id));
+
+      // Map.groupBy when the keys are not strings
+      const bySize = Map.groupBy(orders, (o) => (o.total >= 15 ? 'large' : 'small'));
+      console.log(bySize);
+    </script>
+  </div>
+</body>
+</html>

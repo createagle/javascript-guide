@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 7-3 · Final: Top Scores</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 7-3">
+    <script type="text/plain" class="code">
+      // Return the n highest DIFFERENT scores, highest first.
+      // topScores([5, 9, 7, 9, 3], 2) → [9, 7]
+      // The input array must not change.
+      function topScores(scores, n) {
+        const unique = [...new Set(scores)];          // drop duplicates (chapter 14)
+        return unique.toSorted((a, b) => b - a).slice(0, n);
+      }
+
+      const scores = [5, 9, 7, 9, 3, 10];
+      console.log(topScores(scores, 3), scores);
+    </script>
+    <script type="text/plain" class="tests">
+      test('returns the highest scores, highest first', () => assert.deepEqual(topScores([5, 9, 7, 3], 2), [9, 7]));
+      test('sorts as numbers, not strings', () => assert.deepEqual(topScores([5, 10, 9], 2), [10, 9]));
+      test('skips duplicates', () => assert.deepEqual(topScores([9, 9, 7, 7, 1], 2), [9, 7]));
+      test('does not change the input', () => {
+        const input = [3, 1, 2];
+        topScores(input, 2);
+        assert.deepEqual(input, [3, 1, 2]);
+      });
+      test('n larger than the list returns every unique score', () => assert.deepEqual(topScores([2, 1], 5), [2, 1]));
+    </script>
+  </div>
+</body>
+</html>

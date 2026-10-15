@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 7-2 · Final: Group by Category</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 7-2">
+    <script type="text/plain" class="code">
+      const products = [
+        { name: 'Apple', category: 'fruit' },
+        { name: 'Carrot', category: 'vegetable' },
+        { name: 'Banana', category: 'fruit' },
+        { name: 'Leek', category: 'vegetable' },
+        { name: 'Rice', category: 'grain' },
+      ];
+
+      // Return { fruit: ['Apple', 'Banana'], vegetable: ['Carrot', 'Leek'], grain: ['Rice'] }
+      // with the names sorted alphabetically inside each category.
+      function namesByCategory(items) {
+        const groups = Object.groupBy(items, (item) => item.category);
+        return Object.fromEntries(
+          Object.entries(groups).map(([category, list]) => [
+            category,
+            list.map((item) => item.name).toSorted((a, b) => a.localeCompare(b)),
+          ]),
+        );
+      }
+
+      console.log(namesByCategory(products));
+    </script>
+    <script type="text/plain" class="tests">
+      const items = [
+        { name: 'Banana', category: 'fruit' },
+        { name: 'Leek', category: 'vegetable' },
+        { name: 'Apple', category: 'fruit' },
+        { name: 'Carrot', category: 'vegetable' },
+        { name: 'Rice', category: 'grain' },
+      ];
+      test('groups names by category', () => {
+        const r = namesByCategory(items);
+        assert.deepEqual(Object.keys(r).toSorted(), ['fruit', 'grain', 'vegetable']);
+      });
+      test('sorts names inside each group', () => {
+        const r = namesByCategory(items);
+        assert.deepEqual(r.fruit, ['Apple', 'Banana']);
+        assert.deepEqual(r.vegetable, ['Carrot', 'Leek']);
+      });
+      test('an empty list gives an empty object', () => assert.deepEqual({ ...namesByCategory([]) }, {}));
+    </script>
+  </div>
+</body>
+</html>
