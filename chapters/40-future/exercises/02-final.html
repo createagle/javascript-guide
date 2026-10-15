@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 40-2 · Final: Polyfill a New Method</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 40-2">
+    <script type="text/plain" class="code">
+      // A polyfill for the ES2026 "upsert" methods, for browsers that do not have them yet:
+      //   map.getOrInsert(key, value)            → the value for key; if there is none, sets it to value first
+      //   map.getOrInsertComputed(key, callback) → the same, but calls callback(key) to make the value,
+      //                                            and only when the key is missing
+      // installUpsert(Class) adds both methods to Class.prototype, using its has/get/set, so it works for
+      // Map, WeakMap and any class with those three methods. Like built-in methods they must be:
+      //   - non-enumerable, writable and configurable (use Object.defineProperty)
+      //   - named 'getOrInsert' / 'getOrInsertComputed' with length 2
+      //   - never installed over an existing method of that name (the native one is better)
+      // getOrInsertComputed throws a TypeError if callback is not a function, before touching the map.
+      function installUpsert(Class) {
+        const methods = {
+          getOrInsert(key, value) {
+            if (!this.has(key)) this.set(key, value);
+            return this.get(key);
+          },
+          getOrInsertComputed(key, callback) {
+            if (typeof callback !== 'function') throw new TypeError('callback is not a function');
+            if (this.has(key)) return this.get(key);
+            const value = callback(key);
+            this.set(key, value);   // the callback may have set the key itself: the spec overwrites it
+            return value;
+          },
+        };
+        for (const [name, method] of Object.entries(methods)) {
+          if (Object.hasOwn(Class.prototype, name)) continue;   // keep a native (or earlier) version
+          // Methods written in an object literal are already named; their length is 2
+          Object.defineProperty(Class.prototype, name, { value: method, writable: true, enumerable: false, configurable: true });
+        }
+      }
+
+      installUpsert(Map);
+      installUpsert(WeakMap);
+
+      const words = 'the cat and the hat and the bat'.split(' ');
+      const counts = new Map();
+      for (const word of words) counts.set(word, counts.getOrInsert(word, 0) + 1);
+      console.log(counts);
+
+      const groups = new Map();
+      for (const word of words) groups.getOrInsertComputed(word.length, () => []).push(word);
+      console.log(groups);
+    </script>
+    <script type="text/plain" class="tests">
+      // A small map-like class without the methods, so the tests do not depend on the browser
+      class Store {
+        #map = new Map();
+        calls = 0;
+        has(key) { return this.#map.has(key); }
+        get(key) { return this.#map.get(key); }
+        set(key, value) { this.calls++; this.#map.set(key, value); return this; }
+      }
+      installUpsert(Store);
+
+      test('getOrInsert inserts only when the key is missing', () => {
+        const s = new Store();
+        assert.equal(s.getOrInsert('a', 1), 1);
+        assert.equal(s.getOrInsert('a', 2), 1);
+        assert.equal(s.calls, 1);
+      });
+      test('stored falsy values count as present', () => {
+        const s = new Store();
+        s.set('zero', 0);
+        s.set('nothing', undefined);
+        assert.equal(s.getOrInsert('zero', 99), 0);
+        assert.equal(s.getOrInsert('nothing', 99), undefined);
+      });
+      test('getOrInsertComputed calls the callback with the key, only when missing', () => {
+        const s = new Store();
+        const seen = [];
+        const make = (key) => { seen.push(key); return key.toUpperCase(); };
+        assert.equal(s.getOrInsertComputed('a', make), 'A');
+        assert.equal(s.getOrInsertComputed('a', make), 'A');
+        assert.deepEqual(seen, ['a']);
+      });
+      test('a bad callback throws a TypeError without changing anything', () => {
+        const s = new Store();
+        assert.throws(() => s.getOrInsertComputed('a', 'not a function'), TypeError);
+        assert.equal(s.has('a'), false);
+      });
+      test('installed like built-in methods', () => {
+        for (const name of ['getOrInsert', 'getOrInsertComputed']) {
+          const d = Object.getOwnPropertyDescriptor(Store.prototype, name);
+          assert.ok(d, `${name} should be an own property of the prototype`);
+          assert.deepEqual([d.enumerable, d.writable, d.configurable], [false, true, true], `${name} descriptor`);
+          assert.equal(d.value.name, name);
+          assert.equal(d.value.length, 2);
+        }
+        const seen = [];
+        for (const key in new Store()) seen.push(key);
+        assert.deepEqual(seen, ['calls'], 'for...in must not see the methods');
+      });
+      test('never replaces an existing method', () => {
+        class Native { getOrInsert() { return 'native'; } }
+        installUpsert(Native);
+        assert.equal(new Native().getOrInsert(), 'native');
+      });
+      test('works on Map and WeakMap', () => {
+        const counts = new Map();
+        for (const w of ['a', 'b', 'a']) counts.set(w, counts.getOrInsert(w, 0) + 1);
+        assert.deepEqual([...counts], [['a', 2], ['b', 1]]);
+        const cache = new WeakMap();
+        const key = {};
+        assert.equal(cache.getOrInsertComputed(key, () => 'computed'), 'computed');
+        assert.equal(cache.get(key), 'computed');
+      });
+    </script>
+  </div>
+</body>
+</html>

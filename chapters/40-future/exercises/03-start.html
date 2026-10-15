@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 40-3 · Start: Review AI-Written Code</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 40-3">
+    <script type="text/plain" class="code">
+      // An AI assistant wrote deepEqual(a, b) for us. It looks fine and passes the obvious example.
+      // Review it with the checklist from the chapter, then fix it. It should say whether a and b have the same
+      // structure and values:
+      // - primitives compare with Object.is, so NaN equals NaN, but 0 and -0 are different
+      // - arrays only equal arrays, plain objects only equal plain objects, with the same own keys
+      // - Dates equal when they hold the same time; Maps and Sets when they have the same entries
+      //   (Map keys and Set items are compared with the Map/Set rules, values deeply)
+      // - objects that refer to themselves (cycles) must not crash it
+      // ---- Generated code: review me ----
+      function deepEqual(a, b) {
+        if (a === b) return true;
+        if (typeof a !== 'object' || typeof b !== 'object') return false;
+        for (const key in a) {
+          if (!deepEqual(a[key], b[key])) return false;
+        }
+        return true;
+      }
+
+      console.log(deepEqual({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] }));   // true
+      console.log(deepEqual({ a: 1 }, { a: 1, b: undefined }));              // false: b is a key in only one
+    </script>
+    <script type="text/plain" class="tests">
+      test('nested objects and arrays', () => {
+        assert.equal(deepEqual({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] }), true);
+        assert.equal(deepEqual({ a: [1, { b: 2 }] }, { a: [1, { b: 3 }] }), false);
+      });
+      test('keys that only the second object has', () => {
+        assert.equal(deepEqual({ a: 1 }, { a: 1, b: 2 }), false);
+        assert.equal(deepEqual({ a: 1 }, { a: 1, b: undefined }), false);
+        assert.equal(deepEqual({ a: undefined }, { b: undefined }), false);
+      });
+      test('null is not an empty object', () => {
+        assert.equal(deepEqual(null, {}), false);
+        assert.equal(deepEqual({ a: null }, { a: {} }), false);
+      });
+      test('NaN equals NaN, 0 and -0 differ', () => {
+        assert.equal(deepEqual([NaN], [NaN]), true);
+        assert.equal(deepEqual(0, -0), false);
+      });
+      test('arrays are not objects with number keys', () => {
+        assert.equal(deepEqual([1, 2], { 0: 1, 1: 2 }), false);
+        assert.equal(deepEqual([1, 2], [1, 2, 3]), false);
+      });
+      test('Dates, Maps and Sets compare by content', () => {
+        assert.equal(deepEqual(new Date(0), new Date(0)), true);
+        assert.equal(deepEqual(new Date(0), new Date(1)), false);
+        assert.equal(deepEqual(new Map([['a', [1]]]), new Map([['a', [1]]])), true);
+        assert.equal(deepEqual(new Map([['a', 1]]), new Map([['a', 2]])), false);
+        assert.equal(deepEqual(new Set([1, 2]), new Set([2, 1])), true);
+        assert.equal(deepEqual(new Set([1, 2]), new Set([1, 3])), false);
+      });
+      test('cycles do not crash', () => {
+        const a = { name: 'a' };
+        a.self = a;
+        const b = { name: 'a' };
+        b.self = b;
+        assert.equal(deepEqual(a, b), true);
+      });
+    </script>
+  </div>
+</body>
+</html>

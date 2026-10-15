@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>40-1 JavaScript Resources</title>
+  <style>
+    .controls { width: min(900px, 100%); max-width: none; justify-content: flex-start; }
+    .control input[type="search"] { font: inherit; font-size: 14px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); width: min(260px, 60vw); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+    .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    .count { margin: 0; width: min(900px, 100%); font-size: 13px; color: var(--muted); }
+    .cards { list-style: none; margin: 0; padding: 0; width: min(900px, 100%); display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+    .card { display: grid; align-content: start; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+    .card a { font-weight: 600; text-decoration: none; }
+    .card a:hover, .card a:focus-visible { text-decoration: underline; }
+    .host { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+    .desc { margin: 4px 0 0; font-size: 14px; }
+    .tags { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+    .tag.zh { color: var(--good); }
+  </style>
+</head>
+<body class="demo">
+  <form class="controls" id="filters" role="search">
+    <label class="control">Search <input type="search" id="q" autocomplete="off" placeholder="e.g. Intl, async, Baseline"></label>
+    <label class="control"><input type="checkbox" id="zh"> Has a Chinese version</label>
+    <div class="chips" id="chips" role="group" aria-label="Category"></div>
+  </form>
+  <p class="count" id="count" role="status"></p>
+  <ul class="cards" id="cards"></ul>
+  <script type="module">
+    // The data: add a resource by adding an object here
+    const RESOURCES = [
+      {
+        "category": "Specs",
+        "name": "ECMAScript Language Specification",
+        "url": "https://tc39.es/ecma262/",
+        "description": "ECMA-262, the language itself. The living draft, updated as proposals reach stage 4.",
+        "zh": false
+      },
+      {
+        "category": "Specs",
+        "name": "ECMAScript Internationalization API",
+        "url": "https://tc39.es/ecma402/",
+        "description": "ECMA-402: everything behind Intl, such as NumberFormat, DateTimeFormat and Segmenter.",
+        "zh": false
+      },
+      {
+        "category": "Specs",
+        "name": "HTML Living Standard",
+        "url": "https://html.spec.whatwg.org/",
+        "description": "The event loop, script loading, forms, storage, workers and much more.",
+        "zh": false
+      },
+      {
+        "category": "Specs",
+        "name": "DOM Standard",
+        "url": "https://dom.spec.whatwg.org/",
+        "description": "Nodes, events, EventTarget, AbortController and MutationObserver.",
+        "zh": false
+      },
+      {
+        "category": "Specs",
+        "name": "Fetch Standard",
+        "url": "https://fetch.spec.whatwg.org/",
+        "description": "fetch(), Request, Response, Headers and how CORS works.",
+        "zh": false
+      },
+      {
+        "category": "Proposals",
+        "name": "TC39 proposals",
+        "url": "https://github.com/tc39/proposals",
+        "description": "Every active proposal and its stage, plus the finished ones by ECMAScript year.",
+        "zh": false
+      },
+      {
+        "category": "Proposals",
+        "name": "The TC39 process",
+        "url": "https://tc39.es/process-document/",
+        "description": "What each stage from 0 to 4 means and what a proposal needs to move on.",
+        "zh": false
+      },
+      {
+        "category": "Proposals",
+        "name": "TC39 meeting notes",
+        "url": "https://github.com/tc39/notes",
+        "description": "What the committee discussed and decided, meeting by meeting.",
+        "zh": false
+      },
+      {
+        "category": "Proposals",
+        "name": "test262",
+        "url": "https://github.com/tc39/test262",
+        "description": "The official conformance tests: executable examples of the exact behaviour.",
+        "zh": false
+      },
+      {
+        "category": "Reference",
+        "name": "MDN: JavaScript",
+        "url": "https://developer.mozilla.org/zh-CN/docs/Web/JavaScript",
+        "description": "The guide and reference for the language, with a compatibility table on every page.",
+        "zh": true
+      },
+      {
+        "category": "Reference",
+        "name": "MDN: Web APIs",
+        "url": "https://developer.mozilla.org/zh-CN/docs/Web/API",
+        "description": "Reference for every browser API: DOM, Fetch, Storage, Workers, Canvas…",
+        "zh": true
+      },
+      {
+        "category": "Reference",
+        "name": "The Modern JavaScript Tutorial",
+        "url": "https://zh.javascript.info/",
+        "description": "A free tutorial from the basics to browser APIs, with exercises.",
+        "zh": true
+      },
+      {
+        "category": "Reference",
+        "name": "web.dev: Learn JavaScript",
+        "url": "https://web.dev/learn/javascript",
+        "description": "A course on the language by the Chrome team.",
+        "zh": false
+      },
+      {
+        "category": "Compatibility",
+        "name": "Can I use",
+        "url": "https://caniuse.com/",
+        "description": "Browser support tables, with usage numbers.",
+        "zh": false
+      },
+      {
+        "category": "Compatibility",
+        "name": "Web Platform Status",
+        "url": "https://webstatus.dev/",
+        "description": "Baseline status of web features, and when each became available.",
+        "zh": false
+      },
+      {
+        "category": "Compatibility",
+        "name": "MDN browser-compat-data",
+        "url": "https://github.com/mdn/browser-compat-data",
+        "description": "The data behind MDN compatibility tables, as an npm package.",
+        "zh": false
+      },
+      {
+        "category": "Compatibility",
+        "name": "node.green",
+        "url": "https://node.green/",
+        "description": "Which ECMAScript features each Node.js version supports.",
+        "zh": false
+      },
+      {
+        "category": "Books",
+        "name": "Exploring JavaScript",
+        "url": "https://exploringjs.com/",
+        "description": "Axel Rauschmayer’s free, up-to-date books on modern JavaScript.",
+        "zh": false
+      },
+      {
+        "category": "Books",
+        "name": "Eloquent JavaScript",
+        "url": "https://eloquentjavascript.net/",
+        "description": "A classic introduction to programming with JavaScript, free online.",
+        "zh": false
+      },
+      {
+        "category": "Books",
+        "name": "You Don’t Know JS Yet",
+        "url": "https://github.com/getify/You-Dont-Know-JS",
+        "description": "A deep series on scope, closures, this, types and async.",
+        "zh": false
+      },
+      {
+        "category": "Tools",
+        "name": "Node.js documentation",
+        "url": "https://nodejs.org/docs/latest/api/",
+        "description": "The API reference for every built-in module, node:test included.",
+        "zh": false
+      },
+      {
+        "category": "Tools",
+        "name": "Chrome DevTools",
+        "url": "https://developer.chrome.com/docs/devtools",
+        "description": "Guides to the debugger, the Performance panel, memory snapshots and more.",
+        "zh": false
+      },
+      {
+        "category": "Tools",
+        "name": "Firefox DevTools",
+        "url": "https://firefox-source-docs.mozilla.org/devtools-user/",
+        "description": "The user guide for Firefox’s developer tools.",
+        "zh": false
+      },
+      {
+        "category": "Tools",
+        "name": "AST Explorer",
+        "url": "https://astexplorer.net/",
+        "description": "See the syntax tree of any code, as parsers and linters see it.",
+        "zh": false
+      },
+      {
+        "category": "Tools",
+        "name": "TypeScript Handbook",
+        "url": "https://www.typescriptlang.org/docs/handbook/intro.html",
+        "description": "Types for JavaScript, including JSDoc type checking.",
+        "zh": false
+      },
+      {
+        "category": "Quality",
+        "name": "OWASP Cheat Sheet Series",
+        "url": "https://cheatsheetseries.owasp.org/",
+        "description": "Short, practical security guides: XSS, CSP, authentication and more.",
+        "zh": false
+      },
+      {
+        "category": "Quality",
+        "name": "web.dev: Learn Performance",
+        "url": "https://web.dev/learn/performance",
+        "description": "A course on loading, rendering and interaction performance.",
+        "zh": false
+      },
+      {
+        "category": "News",
+        "name": "V8 blog",
+        "url": "https://v8.dev/blog",
+        "description": "New language features and engine internals from the Chrome engine team.",
+        "zh": false
+      },
+      {
+        "category": "News",
+        "name": "WebKit blog",
+        "url": "https://webkit.org/blog/",
+        "description": "What is new in each Safari release.",
+        "zh": false
+      },
+      {
+        "category": "News",
+        "name": "Mozilla Hacks",
+        "url": "https://hacks.mozilla.org/",
+        "description": "Articles from Firefox engineers.",
+        "zh": false
+      },
+      {
+        "category": "News",
+        "name": "JavaScript Weekly",
+        "url": "https://javascriptweekly.com/",
+        "description": "A weekly newsletter with the most interesting JavaScript news and articles.",
+        "zh": false
+      }
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const CATEGORIES = ['All', ...new Set(RESOURCES.map((r) => r.category))];
+    const params = new URLSearchParams(location.search);
+    const state = { q: params.get('q') ?? '', category: params.get('category') ?? 'All', zh: params.has('zh') };
+    if (!CATEGORIES.includes(state.category)) state.category = 'All';
+
+    $('chips').append(...CATEGORIES.map((name) =>
+      Object.assign(document.createElement('button'), { type: 'button', className: 'btn chip', textContent: name })));
+
+    // Case- and accent-insensitive search over name, description and category
+    const fold = (text) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+    function matches(resource) {
+      if (state.category !== 'All' && resource.category !== state.category) return false;
+      if (state.zh && !resource.zh) return false;
+      const words = fold(state.q).split(/\s+/).filter(Boolean);
+      const text = fold(`${resource.name} ${resource.description} ${resource.category}`);
+      return words.every((word) => text.includes(word));
+    }
+
+    function card({ category, name, url, description, zh }) {
+      const li = document.createElement('li');
+      li.className = 'card';
+      const link = Object.assign(document.createElement('a'), { href: url, textContent: name, target: '_blank', rel: 'noopener' });
+      const host = Object.assign(document.createElement('span'), { className: 'host', textContent: new URL(url).hostname });
+      const tags = document.createElement('p');
+      tags.className = 'tags';
+      tags.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: category }));
+      if (zh) tags.append(Object.assign(document.createElement('span'), { className: 'tag zh', textContent: '中文' }));
+      li.append(link, host, Object.assign(document.createElement('p'), { className: 'desc', textContent: description }), tags);
+      return li;
+    }
+
+    function render() {
+      for (const chip of $('chips').children) chip.setAttribute('aria-pressed', String(chip.textContent === state.category));
+      const found = RESOURCES.filter(matches);
+      $('cards').replaceChildren(...found.map(card));
+      $('count').textContent = found.length ? `${found.length} of ${RESOURCES.length} resources` : 'Nothing matches: try fewer words or another category.';
+      // Keep the filters in the URL, so a filtered list can be shared
+      const query = new URLSearchParams();
+      if (state.q) query.set('q', state.q);
+      if (state.category !== 'All') query.set('category', state.category);
+      if (state.zh) query.set('zh', '');
+      history.replaceState(null, '', `${location.pathname}${query.size ? `?${query}` : ''}${location.hash}`);
+    }
+
+    $('q').value = state.q;
+    $('zh').checked = state.zh;
+    $('q').addEventListener('input', () => { state.q = $('q').value; render(); });
+    $('zh').addEventListener('change', () => { state.zh = $('zh').checked; render(); });
+    $('chips').addEventListener('click', (event) => {
+      const chip = event.target.closest('.chip');
+      if (!chip) return;
+      state.category = chip.textContent;
+      render();
+    });
+    $('filters').addEventListener('submit', (event) => event.preventDefault());
+    render();
+  </script>
+</body>
+</html>

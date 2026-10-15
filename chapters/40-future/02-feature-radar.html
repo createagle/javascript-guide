@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>40-2 Feature Radar</title>
+  <style>
+    .summary { margin: 0; font-weight: 600; }
+    .table-wrap { width: min(900px, 100%); overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    caption { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding-bottom: 8px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    thead th { font-size: 12px; color: var(--muted); }
+    tbody th { font-weight: 600; }
+    .std { color: var(--info); white-space: nowrap; }
+    .proposal { color: var(--warn); white-space: nowrap; }
+    .yes { color: var(--good); font-weight: 600; }
+    .no { color: var(--muted); }
+    .sample { font: 12px/1.5 var(--mono); overflow-wrap: anywhere; min-width: 10em; }
+    @media (max-width: 520px) {
+      thead { display: none; }
+      tr { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+      th, td { border: 0; padding: 0; }
+      td.sample { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body class="demo">
+  <p class="summary" id="summary" role="status"></p>
+  <div class="table-wrap">
+    <table>
+      <caption>Newer JavaScript features in this browser</caption>
+      <thead><tr><th scope="col">Feature</th><th scope="col">Status</th><th scope="col">Here</th><th scope="col">Try it</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <script type="module">
+    // Each feature: how to detect it, and a tiny example to run when it is there.
+    // Detection never assumes support: it checks, and a missing feature only gives a "no".
+
+    // New syntax cannot be detected by looking for a property: try to compile it instead.
+    // (One of the few good uses of new Function: the code is ours, never user input.)
+    const parses = (code) => {
+      try {
+        new Function(code);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    // Module-only syntax needs a module: import one from a Blob URL and see if it loads
+    async function moduleParses(code) {
+      const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+      try {
+        await import(url);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    const FEATURES = [
+      ['Set methods', 'ES2025', () => typeof Set.prototype.union === 'function',
+        () => [...new Set([1, 2, 3]).intersection(new Set([2, 3, 4]))].join(', ')],
+      ['Iterator helpers', 'ES2025', () => typeof globalThis.Iterator?.prototype?.map === 'function',
+        () => [1, 2, 3, 4].values().filter((n) => n % 2 === 0).map((n) => n * 10).toArray().join(', ')],
+      ['Promise.try', 'ES2025', () => typeof Promise.try === 'function', () => 'Promise.try(() => JSON.parse("{")) rejects instead of throwing'],
+      ['RegExp.escape', 'ES2025', () => typeof RegExp.escape === 'function', () => RegExp.escape('1+1=2?')],
+      ['Float16 (Math.f16round)', 'ES2025', () => typeof Math.f16round === 'function', () => String(Math.f16round(1.337))],
+      ['Array.fromAsync', 'ES2026', () => typeof Array.fromAsync === 'function', () => 'await Array.fromAsync(asyncIterable)'],
+      ['Error.isError', 'ES2026', () => typeof Error.isError === 'function', () => `${Error.isError(new TypeError())}, ${Error.isError({ message: 'x' })}`],
+      ['Math.sumPrecise', 'ES2026', () => typeof Math.sumPrecise === 'function',
+        () => `${Math.sumPrecise([0.1, 0.2, 0.3])} (reduce gives ${[0.1, 0.2, 0.3].reduce((a, b) => a + b)})`],
+      ['Uint8Array base64', 'ES2026', () => typeof Uint8Array.fromBase64 === 'function', () => new TextEncoder().encode('Hi!').toBase64()],
+      ['Iterator.concat', 'ES2026', () => typeof globalThis.Iterator?.concat === 'function',
+        () => Iterator.concat([1, 2].values(), [3].values()).toArray().join(', ')],
+      ['Map.prototype.getOrInsert', 'ES2026', () => typeof Map.prototype.getOrInsert === 'function',
+        () => String(new Map().getOrInsert('visits', 0))],
+      ['JSON.rawJSON', 'ES2026', () => typeof JSON.rawJSON === 'function', () => JSON.stringify({ big: JSON.rawJSON('12345678901234567890') })],
+      ['Temporal', 'ES2027', () => typeof globalThis.Temporal === 'object', () => Temporal.Now.plainDateISO().add({ months: 1 }).toString()],
+      ['using declarations', 'ES2027', () => parses('{ using resource = null; }'), () => 'using file = await open(path)'],
+      ['Iterator.zip', 'ES2027', () => typeof globalThis.Iterator?.zip === 'function',
+        () => Iterator.zip([[1, 2], ['a', 'b']]).toArray().map((pair) => pair.join('')).join(', ')],
+      ['import defer', 'Stage 3', () => moduleParses('import defer * as ns from "data:text/javascript,export default 1";'), () => 'import defer * as heavy from "./heavy.js"'],
+      ['Decorators', 'Stage 2.7', () => parses('function d() {} @d class C {}'), () => '@logged class Service {}'],
+      ['Signals', 'Stage 1', () => typeof globalThis.Signal === 'object', () => 'new Signal.State(0)'],
+      ['Composites', 'Stage 2', () => typeof globalThis.Composite === 'function', () => 'Composite({ x: 1, y: 2 })'],
+    ];
+
+    const rows = document.getElementById('rows');
+    let available = 0;
+    for (const [name, status, detect, example] of FEATURES) {
+      const tr = document.createElement('tr');
+      let here = false;
+      try {
+        here = await detect();
+      } catch {
+        here = false;
+      }
+      let sample = '';
+      if (here) {
+        available++;
+        try {
+          sample = example();
+        } catch (error) {
+          sample = `(${error.name})`;
+        }
+      }
+      const cells = [name, status, here ? 'Yes' : 'No', here ? sample : '—'];
+      for (const [i, text] of cells.entries()) {
+        const cell = document.createElement(i === 0 ? 'th' : 'td');
+        if (i === 0) cell.scope = 'row';
+        cell.textContent = text;
+        if (i === 1) cell.className = /^ES/.test(status) ? 'std' : 'proposal';
+        if (i === 2) cell.className = here ? 'yes' : 'no';
+        if (i === 3) cell.className = 'sample';
+        tr.append(cell);
+      }
+      rows.append(tr);
+    }
+    document.getElementById('summary').textContent = `${available} of ${FEATURES.length} features are available in this browser.`;
+  </script>
+</body>
+</html>
