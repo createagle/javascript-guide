@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 22-2 · Final: Fetch with a Timeout</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 22-2">
+    <script type="text/plain" class="code">
+      // A fake server: each URL takes a while to answer, and it stops when the request's signal aborts
+      const DELAYS = { '/fast': 20, '/slow': 2000 };
+      globalThis.fetch = (url, init = {}) => new Promise((resolve, reject) => {
+        const { signal } = init;
+        if (signal?.aborted) return reject(signal.reason);
+        const timer = setTimeout(() => resolve(new Response(`${init.method ?? 'GET'} ${url}`)), DELAYS[url] ?? 50);
+        signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        }, { once: true });
+      });
+
+      // fetchWithTimeout(url, { timeout, signal, ...options }) works like fetch, but:
+      // - gives up after `timeout` ms (default 5000) with a TimeoutError
+      // - still stops when the caller's own `signal` aborts (with an AbortError)
+      // Hint: AbortSignal.timeout(ms) and AbortSignal.any([...signals])
+      async function fetchWithTimeout(url, { timeout = 5000, signal, ...options } = {}) {
+        const timeoutSignal = AbortSignal.timeout(timeout);
+        // Stop on whichever comes first: the timeout or the caller's own signal
+        const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+        return fetch(url, { ...options, signal: combined });
+      }
+
+      const response = await fetchWithTimeout('/fast', { timeout: 500 });
+      console.log(await response.text());
+    </script>
+    <script type="text/plain" class="tests">
+      test('a fast response arrives', async () => assert.equal(await (await fetchWithTimeout('/fast', { timeout: 500 })).text(), 'GET /fast'));
+      test('a slow response times out', async () => {
+        const start = Date.now();
+        const error = await assert.rejects(fetchWithTimeout('/slow', { timeout: 100 }));
+        assert.equal(error.name, 'TimeoutError');
+        assert.ok(Date.now() - start < 1000, 'it waited for the server');
+      });
+      test("the caller's signal still works", async () => {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 30);
+        const error = await assert.rejects(fetchWithTimeout('/slow', { timeout: 1000, signal: controller.signal }));
+        assert.equal(error.name, 'AbortError');
+      });
+      test('other options are passed on', async () => {
+        const response = await fetchWithTimeout('/fast', { method: 'POST' });
+        assert.equal(await response.text(), 'POST /fast');
+      });
+    </script>
+  </div>
+</body>
+</html>

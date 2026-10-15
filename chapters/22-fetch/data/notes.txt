@@ -1,0 +1,2 @@
+Plain text, read with response.text().
+fetch() does not care what the body is: you choose how to read it.

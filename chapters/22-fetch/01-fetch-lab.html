@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>22-1 Fetch Lab</title>
+  <style>
+    .request, .response { width: min(820px, 100%); }
+    .request { display: grid; gap: 10px; }
+    .field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+    .field input { font: 13px var(--mono); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 0; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+    .row .field input { width: 8em; }
+    pre.code { font-size: 12px; margin: 0 0 12px; }
+    .verdict { font-weight: 600; margin: 0 0 10px; overflow-wrap: anywhere; }
+    .verdict.good { color: var(--good); }
+    .verdict.bad { color: var(--bad); }
+    .meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 0; font-size: 13px; }
+    .meta dt { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+    .meta dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+    .body { margin: 12px 0 0; padding: 10px 12px; background: var(--surface); border-radius: 8px; font-size: 12px; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body class="demo">
+  <form class="panel request" id="form">
+    <label class="field">Preset
+      <select class="btn" id="preset"></select></label>
+    <label class="field">URL
+      <input id="url" type="text" spellcheck="false" autocomplete="off"></label>
+    <div class="row">
+      <label class="field">Read the body with
+        <select class="btn" id="as">
+          <option value="json">response.json()</option>
+          <option value="text">response.text()</option>
+          <option value="blob">response.blob()</option>
+        </select></label>
+      <label class="field">Timeout (ms, 0 = none)
+        <input id="timeout" type="number" min="0" step="1" inputmode="numeric"></label>
+      <button class="btn btn-primary" type="submit">Send</button>
+    </div>
+  </form>
+  <div class="panel response">
+    <pre class="code" id="code"></pre>
+    <p class="verdict" id="verdict" aria-live="polite">Pick a preset and press Send.</p>
+    <dl class="meta" id="meta"></dl>
+    <pre class="body" id="body" hidden></pre>
+  </div>
+  <script type="module">
+    const PRESETS = [
+      { label: 'JSON: 200 OK', url: 'data/user.json', as: 'json', timeout: 0 },
+      { label: 'Missing file: 404', url: 'data/missing.json', as: 'json', timeout: 0 },
+      { label: 'Broken JSON', url: 'data/broken.json', as: 'json', timeout: 0 },
+      { label: 'Plain text', url: 'data/notes.txt', as: 'text', timeout: 0 },
+      { label: 'As a Blob', url: 'data/user.json', as: 'blob', timeout: 0 },
+      { label: 'Another origin, no CORS', url: 'https://example.com/', as: 'text', timeout: 0 },
+      { label: 'Timeout after 1 ms', url: 'data/countries.json', as: 'json', timeout: 1 },
+    ];
+    const $ = (id) => document.getElementById(id);
+    PRESETS.forEach((p, i) => $('preset').append(new Option(p.label, i)));
+    function usePreset(i) {
+      const p = PRESETS[i];
+      $('url').value = p.url;
+      $('as').value = p.as;
+      $('timeout').value = p.timeout;
+      showCode();
+    }
+    function showCode() {
+      const timeout = $('timeout').valueAsNumber || 0;
+      const options = timeout > 0 ? `, { signal: AbortSignal.timeout(${timeout}) }` : '';
+      $('code').textContent = `const response = await fetch(${JSON.stringify($('url').value)}${options});\n` +
+        `if (!response.ok) throw new Error(\`HTTP \${response.status}\`);\n` +
+        `const body = await response.${$('as').value}();`;
+    }
+    function meta(entries) {
+      $('meta').replaceChildren(...entries.flatMap(([k, v]) => [
+        Object.assign(document.createElement('dt'), { textContent: k }),
+        Object.assign(document.createElement('dd'), { textContent: v }),
+      ]));
+    }
+    function verdict(text, kind) {
+      $('verdict').textContent = text;
+      $('verdict').className = `verdict ${kind}`;
+    }
+
+    async function send() {
+      const url = $('url').value.trim();
+      const as = $('as').value;
+      const timeout = $('timeout').valueAsNumber || 0;
+      $('body').hidden = true;
+      meta([]);
+      verdict('Waiting…', '');
+      const start = performance.now();
+      let response;
+      try {
+        response = await fetch(url, timeout > 0 ? { signal: AbortSignal.timeout(timeout) } : {});
+      } catch (error) {
+        // fetch() rejects only when there is no HTTP response at all
+        const why = error.name === 'TimeoutError' ? 'the timeout fired first'
+          : error.name === 'AbortError' ? 'the request was aborted'
+          : 'a network error, a blocked cross-origin request (CORS) or a bad URL';
+        verdict(`fetch() rejected with ${error.name}: ${error.message} (${why}).`, 'bad');
+        return;
+      }
+      const ms = Math.round(performance.now() - start);
+      const headers = [...response.headers].slice(0, 6).map(([k, v]) => [`header ${k}`, v]);
+      meta([['status', `${response.status} ${response.statusText}`], ['ok', String(response.ok)], ['url', response.url], ['time', `${ms} ms`], ...headers]);
+      try {
+        const body = await response[as]();
+        $('body').hidden = false;
+        $('body').textContent = as === 'json' ? JSON.stringify(body, null, 2)
+          : as === 'blob' ? `Blob { size: ${body.size}, type: '${body.type}' }`
+          : body.slice(0, 2000);
+        verdict(response.ok
+          ? `fetch() resolved and the body was read with response.${as}().`
+          : `fetch() resolved, even though the status is ${response.status}: check response.ok yourself.`, response.ok ? 'good' : 'bad');
+      } catch (error) {
+        verdict(`fetch() resolved (status ${response.status}), but response.${as}() rejected with ${error.name}: ${error.message}`, 'bad');
+      }
+    }
+
+    $('preset').addEventListener('change', () => usePreset(Number($('preset').value)));
+    $('form').addEventListener('input', (event) => { if (event.target.id !== 'preset') showCode(); });
+    $('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      send();
+    });
+    usePreset(0);
+  </script>
+</body>
+</html>

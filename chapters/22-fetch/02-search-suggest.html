@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>22-2 Cancelable Search Suggestions</title>
+  <style>
+    .search, .log-panel { width: min(760px, 100%); }
+    #q { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); }
+    .options { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 10px 0; font-size: 14px; }
+    .options label { display: flex; align-items: center; gap: 6px; }
+    .status { font-size: 13px; color: var(--muted); min-height: 1.4em; margin: 0 0 6px; }
+    .results { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; min-height: 2em; }
+    .results li { padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; }
+    .log-panel .label { display: flex; justify-content: space-between; align-items: center; }
+    .log { margin: 0; padding: 0; list-style: none; font: 12px/1.7 var(--mono); max-height: 260px; overflow: auto; }
+    .log:empty::before { content: "Nothing sent yet"; color: var(--muted); }
+    .log li { overflow-wrap: anywhere; }
+    .log .good { color: var(--good); }
+    .log .bad { color: var(--bad); font-weight: 600; }
+    .log .warn { color: var(--warn); }
+    .log .muted { color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel search">
+    <label class="label" for="q">Search countries and regions</label>
+    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Type quickly, e.g. “united”">
+    <div class="options">
+      <label><input type="checkbox" id="abort" checked> Abort outdated requests</label>
+      <label><input type="checkbox" id="debounce"> Wait until typing pauses (300 ms)</label>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+    <ul class="results" id="results"></ul>
+  </div>
+  <div class="panel log-panel">
+    <p class="label">Requests <button class="btn" id="clear" type="button">Clear</button></p>
+    <ol class="log" id="log"></ol>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // A delay that an AbortSignal can cut short
+    const sleep = (ms, signal) => new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      }, { once: true });
+    });
+
+    // The "server": a static JSON file, plus a random delay so answers come back out of order
+    async function searchCountries(query, { signal } = {}) {
+      const response = await fetch('data/countries.json', { signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const names = await response.json();
+      await sleep(150 + Math.random() * 900, signal);
+      const q = query.toLowerCase();
+      return names.filter((name) => name.toLowerCase().includes(q)).slice(0, 8);
+    }
+
+    let controller = null;
+    let latest = 0;          // the number of the newest request
+    let newestShown = 0;     // the newest request whose results have been on screen
+    let timer = 0;
+
+    function log(text, kind = '') {
+      $('log').prepend(Object.assign(document.createElement('li'), { textContent: text, className: kind }));
+    }
+
+    async function suggest(query) {
+      if ($('abort').checked) controller?.abort();       // the previous request is no longer wanted
+      controller = new AbortController();
+      const id = ++latest;
+      log(`#${id} “${query}” sent`);
+      $('status').textContent = 'Searching…';
+      try {
+        const results = await searchCountries(query, { signal: controller.signal });
+        // Without aborting, an old answer can arrive after a newer one and overwrite it
+        if (id < newestShown) {
+          log(`#${id} “${query}” arrived after #${newestShown}: shown anyway, the list is now wrong`, 'bad');
+        } else {
+          const waiting = id < latest;
+          log(`#${id} “${query}” → ${results.length} result(s)${waiting ? ' (a newer request is still on its way)' : ''}`, waiting ? 'warn' : 'good');
+        }
+        newestShown = Math.max(newestShown, id);
+        $('results').replaceChildren(...results.map((name) => Object.assign(document.createElement('li'), { textContent: name })));
+        $('status').textContent = `${results.length ? results.length : 'No'} match(es) for “${query}”`;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          log(`#${id} “${query}” aborted`, 'muted');
+        } else {
+          log(`#${id} “${query}” failed: ${error.message}`, 'bad');
+          $('status').textContent = 'Search failed.';
+        }
+      }
+    }
+
+    $('q').addEventListener('input', () => {
+      const query = $('q').value.trim();
+      clearTimeout(timer);
+      if (!query) {
+        controller?.abort();
+        $('results').replaceChildren();
+        $('status').textContent = '';
+        return;
+      }
+      if ($('debounce').checked) timer = setTimeout(() => suggest(query), 300);
+      else suggest(query);
+    });
+    $('clear').addEventListener('click', () => $('log').replaceChildren());
+  </script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 22-1 · Final: A Careful getJSON</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 22-1">
+    <script type="text/plain" class="code">
+      // A fake server so the exercise runs anywhere: fetch(url, init) answers from this table
+      // and remembers the last init it was given.
+      const ROUTES = {
+        '/api/users/1': () => Response.json({ id: 1, name: 'Ada' }),
+        '/api/broken': () => new Response('{ "id": 1, ', { headers: { 'Content-Type': 'application/json' } }),
+      };
+      let lastInit;
+      globalThis.fetch = async (url, init) => {
+        lastInit = init;
+        if (url === '/api/offline') throw new TypeError('Failed to fetch');
+        return ROUTES[url]?.() ?? new Response('Not found', { status: 404, statusText: 'Not Found' });
+      };
+
+      class HttpError extends Error {
+        constructor(response) {
+          super(`HTTP ${response.status} ${response.statusText}`);
+          this.name = 'HttpError';
+          this.status = response.status;
+        }
+      }
+
+      // getJSON(url, options) should:
+      // - send the header Accept: application/json (and keep any headers the caller passes)
+      // - throw an HttpError when the status is not 2xx
+      // - resolve to the parsed JSON otherwise
+      async function getJSON(url, options = {}) {
+        const response = await fetch(url, {
+          ...options,
+          headers: { Accept: 'application/json', ...options.headers },
+        });
+        if (!response.ok) throw new HttpError(response);   // fetch only rejects when there is no response
+        return response.json();
+      }
+
+      console.log(await getJSON('/api/users/1'));
+      try {
+        await getJSON('/api/users/2');
+      } catch (error) {
+        console.log(error.name, error.message);
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      test('resolves to the data', async () => assert.deepEqual(await getJSON('/api/users/1'), { id: 1, name: 'Ada' }));
+      test('a 404 rejects with an HttpError', async () => {
+        const error = await assert.rejects(getJSON('/api/users/2'));
+        assert.equal(error.name, 'HttpError');
+        assert.equal(error.status, 404);
+        assert.equal(error.message, 'HTTP 404 Not Found');
+      });
+      test('broken JSON rejects with a SyntaxError', async () => {
+        const error = await assert.rejects(getJSON('/api/broken'));
+        assert.equal(error.name, 'SyntaxError');
+      });
+      test('a network error passes through', async () => {
+        const error = await assert.rejects(getJSON('/api/offline'));
+        assert.equal(error.name, 'TypeError');
+      });
+      test('sends Accept: application/json', async () => {
+        await getJSON('/api/users/1');
+        assert.equal(new Headers(lastInit?.headers).get('Accept'), 'application/json');
+      });
+      test("keeps the caller's headers and options", async () => {
+        await getJSON('/api/users/1', { method: 'GET', headers: { 'X-Trace': 'abc' } });
+        assert.equal(new Headers(lastInit.headers).get('X-Trace'), 'abc');
+        assert.equal(new Headers(lastInit.headers).get('Accept'), 'application/json');
+        assert.equal(lastInit.method, 'GET');
+      });
+    </script>
+  </div>
+</body>
+</html>
