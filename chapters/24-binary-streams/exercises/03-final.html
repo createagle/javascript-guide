@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 24-3 · Final: Re-chunk a Byte Stream</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 24-3">
+    <script type="text/plain" class="code">
+      // Helpers: a stream that hands out the given chunks, and a way to collect a stream into an array
+      const streamOf = (chunks) => new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      });
+      async function collect(stream) {
+        const out = [];
+        const reader = stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) return out;
+          out.push(value);
+        }
+      }
+
+      // rechunk(size) returns a TransformStream that turns Uint8Array chunks of any length
+      // into chunks of exactly `size` bytes (only the last one may be shorter),
+      // for example to upload a file in pieces of a fixed size.
+      function rechunk(size) {
+        let pending = new Uint8Array(size);     // the piece being filled
+        let filled = 0;
+        return new TransformStream({
+          transform(chunk, controller) {
+            let offset = 0;
+            while (offset < chunk.length) {
+              const take = Math.min(size - filled, chunk.length - offset);
+              pending.set(chunk.subarray(offset, offset + take), filled);
+              filled += take;
+              offset += take;
+              if (filled === size) {
+                controller.enqueue(pending);
+                pending = new Uint8Array(size);   // a fresh buffer: the old one now belongs to the reader
+                filled = 0;
+              }
+            }
+          },
+          flush(controller) {
+            if (filled > 0) controller.enqueue(pending.slice(0, filled));
+          },
+        });
+      }
+
+      const pieces = await collect(streamOf([Uint8Array.of(1, 2, 3), Uint8Array.of(4, 5, 6, 7, 8, 9, 10)]).pipeThrough(rechunk(4)));
+      console.log(pieces);
+    </script>
+    <script type="text/plain" class="tests">
+      const lengths = (chunks) => chunks.map((c) => c.length);
+      const join = (chunks) => chunks.flatMap((c) => [...c]);
+      test('fixed-size pieces, a shorter last one', async () => {
+        const out = await collect(streamOf([Uint8Array.of(1, 2, 3), Uint8Array.of(4, 5, 6, 7, 8, 9, 10)]).pipeThrough(rechunk(4)));
+        assert.deepEqual(lengths(out), [4, 4, 2]);
+        assert.deepEqual(join(out), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      });
+      test('many tiny chunks are joined', async () => {
+        const tiny = Array.from({ length: 9 }, (_, i) => Uint8Array.of(i));
+        assert.deepEqual(lengths(await collect(streamOf(tiny).pipeThrough(rechunk(3)))), [3, 3, 3]);
+      });
+      test('a big chunk is split', async () => {
+        const big = Uint8Array.from({ length: 1000 }, (_, i) => i % 256);
+        const out = await collect(streamOf([big]).pipeThrough(rechunk(256)));
+        assert.deepEqual(lengths(out), [256, 256, 256, 232]);
+        assert.deepEqual(join(out), [...big]);
+      });
+      test('pieces are Uint8Arrays that do not change later', async () => {
+        const out = await collect(streamOf([Uint8Array.of(1, 2), Uint8Array.of(3, 4), Uint8Array.of(5, 6)]).pipeThrough(rechunk(2)));
+        assert.ok(out.every((c) => c instanceof Uint8Array));
+        assert.deepEqual(out.map((c) => [...c]), [[1, 2], [3, 4], [5, 6]]);
+      });
+      test('an empty stream gives no pieces', async () => assert.deepEqual(await collect(streamOf([]).pipeThrough(rechunk(4))), []));
+    </script>
+  </div>
+</body>
+</html>

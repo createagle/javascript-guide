@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>24-2 Processing Text as a Stream</title>
+  <style>
+    .pipeline { width: min(860px, 100%); }
+    .stages { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .stages li { flex: 1 1 130px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: 600 12px/1.5 var(--mono); position: relative; }
+    .stages li span, .stages output { font-weight: 400; color: var(--muted); }
+    .result { margin: 0 0 12px; font-weight: 600; }
+    .result.good { color: var(--good); }
+    .result.bad { color: var(--bad); }
+    .matches { margin: 0; padding: 10px 12px; background: var(--surface); border-radius: 8px; font: 12px/1.6 var(--mono); min-height: 3em; overflow-x: auto; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Log lines
+      <select class="btn" id="size">
+        <option value="20000">20,000</option>
+        <option value="200000" selected>200,000</option>
+        <option value="500000">500,000</option>
+      </select></label>
+    <label class="control">Keep lines with
+      <select class="btn" id="filter">
+        <option value=" 500 ">status 500</option>
+        <option value=" 404 ">status 404</option>
+        <option value="/checkout">/checkout</option>
+      </select></label>
+    <button class="btn btn-primary" id="run" type="button">Run the pipeline</button>
+    <button class="btn" id="cancel" type="button" disabled>Cancel</button>
+  </div>
+  <div class="panel pipeline">
+    <ol class="stages" aria-label="Pipeline">
+      <li>generated log<br><output id="bytes">0 B</output></li>
+      <li>TextDecoderStream<br><span>bytes → text</span></li>
+      <li>splitLines()<br><output id="lines">0 lines</output></li>
+      <li>keep(…)<br><output id="kept">0 kept</output></li>
+      <li>WritableStream<br><output id="first">–</output></li>
+    </ol>
+    <p class="result" id="result" aria-live="polite">Press Run.</p>
+    <p class="label">First 12 matching lines</p>
+    <pre class="matches" id="matches"></pre>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    // Give the page a turn between chunks, so it can paint and respond to clicks
+    const yieldToPage = () => new Promise((resolve) => setTimeout(resolve));
+
+    // A big access log, made up on the fly and handed out as bytes, chunk by chunk, like a download
+    function logStream(lineCount, onBytes) {
+      const encoder = new TextEncoder();
+      const PATHS = ['/', '/products', '/products/42', '/cart', '/checkout', '/api/search?q=shoes', '/login'];
+      const STATUSES = [200, 200, 200, 200, 200, 200, 301, 304, 404, 500];
+      let seed = 42;
+      const random = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return (seed >>> 16) % n; };
+      let line = 0;
+      return new ReadableStream({
+        async pull(controller) {
+          let text = '';
+          for (let i = 0; i < 2000 && line < lineCount; i++, line++) {
+            const time = new Date(Date.UTC(2026, 9, 15, 8, 0, line % 60, line % 1000)).toISOString();
+            text += `${time} GET ${PATHS[random(PATHS.length)]} ${STATUSES[random(STATUSES.length)]} ${10 + random(900)}ms\n`;
+          }
+          if (text) {
+            const bytes = encoder.encode(text);
+            onBytes(bytes.length);
+            controller.enqueue(bytes);
+            await yieldToPage();
+          }
+          if (line >= lineCount) controller.close();
+        },
+      });
+    }
+
+    // Text chunks in, one line per chunk out. A chunk can end in the middle of a line.
+    function splitLines() {
+      let rest = '';
+      return new TransformStream({
+        transform(chunk, controller) {
+          const lines = (rest + chunk).split('\n');
+          rest = lines.pop();                 // the last piece may be unfinished: keep it for later
+          for (const line of lines) controller.enqueue(line);
+        },
+        flush(controller) {
+          if (rest) controller.enqueue(rest);
+        },
+      });
+    }
+
+    // Passes on only the chunks that pass the test
+    const keep = (test) => new TransformStream({
+      transform(chunk, controller) {
+        if (test(chunk)) controller.enqueue(chunk);
+      },
+    });
+
+    // Counts what flows through without changing it
+    const tap = (onChunk) => new TransformStream({
+      transform(chunk, controller) {
+        onChunk(chunk);
+        controller.enqueue(chunk);
+      },
+    });
+
+    let controller;
+    async function run() {
+      const size = Number($('size').value);
+      const needle = $('filter').value;
+      const stats = { bytes: 0, lines: 0, kept: 0, first: null };
+      const matches = [];
+      const start = performance.now();
+      controller = new AbortController();
+      $('run').disabled = true;
+      $('cancel').disabled = false;
+      $('matches').textContent = '';
+      $('result').className = 'result';
+      $('result').textContent = 'Running…';
+      const show = () => {
+        $('bytes').textContent = `${(stats.bytes / 1e6).toFixed(2)} MB`;
+        $('lines').textContent = `${stats.lines.toLocaleString('en')} lines`;
+        $('kept').textContent = `${stats.kept.toLocaleString('en')} kept`;
+        $('first').textContent = stats.first === null ? '–' : `1st after ${stats.first} ms`;
+      };
+      const timer = setInterval(show, 100);
+      try {
+        await logStream(size, (n) => { stats.bytes += n; })
+          .pipeThrough(new TextDecoderStream())
+          .pipeThrough(splitLines())
+          .pipeThrough(tap(() => { stats.lines++; }))
+          .pipeThrough(keep((line) => line.includes(needle)))
+          .pipeTo(new WritableStream({
+            write(line) {
+              stats.kept++;
+              if (stats.first === null) stats.first = Math.round(performance.now() - start);
+              if (matches.length < 12) {
+                matches.push(line);
+                $('matches').textContent = matches.join('\n');
+              }
+            },
+          }), { signal: controller.signal });
+        $('result').textContent = `Done in ${Math.round(performance.now() - start).toLocaleString('en')} ms. ` +
+          `The first match was on screen after ${stats.first} ms; the whole log was never held in memory at once.`;
+        $('result').classList.add('good');
+      } catch (error) {
+        $('result').textContent = error.name === 'AbortError' ? 'Cancelled: pipeTo() stopped every stage of the pipeline.' : `Failed: ${error.message}`;
+        $('result').classList.add('bad');
+      }
+      clearInterval(timer);
+      show();
+      $('run').disabled = false;
+      $('cancel').disabled = true;
+    }
+    $('run').addEventListener('click', run);
+    $('cancel').addEventListener('click', () => controller.abort());
+  </script>
+</body>
+</html>

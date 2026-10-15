@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 24-2 · Start: Fit Text into a Byte Limit</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 24-2">
+    <script type="text/plain" class="code">
+      // A database column holds at most `maxBytes` bytes of UTF-8.
+      // fitBytes(text, maxBytes) returns the longest start of `text` that fits,
+      // without cutting a character in half. Hint: TextEncoder's encodeInto() reports how much it read.
+      function fitBytes(text, maxBytes) {
+        return text.slice(0, maxBytes);
+      }
+
+      console.log(fitBytes('Hello, 世界', 10));
+    </script>
+    <script type="text/plain" class="tests">
+      const utf8Length = (s) => new TextEncoder().encode(s).length;
+      test('ASCII: one byte per character', () => assert.equal(fitBytes('Hello, world', 5), 'Hello'));
+      test('Chinese characters take 3 bytes each', () => {
+        assert.equal(fitBytes('Hello, 世界', 10), 'Hello, 世');
+        assert.equal(fitBytes('Hello, 世界', 11), 'Hello, 世');
+        assert.equal(fitBytes('Hello, 世界', 13), 'Hello, 世界');
+      });
+      test('an emoji (4 bytes) is never cut in half', () => {
+        assert.equal(fitBytes('ok👍👍', 5), 'ok');
+        assert.equal(fitBytes('ok👍👍', 6), 'ok👍');
+      });
+      test('the result always fits', () => {
+        const text = 'Ünïcödé 文字 ✓ 🎉 mixed';
+        for (let max = 0; max <= 40; max++) assert.ok(utf8Length(fitBytes(text, max)) <= max, `max ${max}`);
+      });
+      test('text that fits is unchanged', () => assert.equal(fitBytes('短', 100), '短'));
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>24-1 File Hash and Hex Viewer</title>
+  <style>
+    .pick, .facts { width: min(820px, 100%); }
+    .pick { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; border-style: dashed; }
+    .pick.over { border-color: var(--accent); background: var(--surface); }
+    .file-label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+    .file-label input { font-size: 13px; max-width: 100%; }
+    .or { font-size: 13px; color: var(--muted); }
+    .samples { display: flex; flex-wrap: wrap; gap: 6px; }
+    .hint { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+    .meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; margin: 0 0 14px; font-size: 13px; }
+    .meta dt { color: var(--muted); }
+    .meta dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+    .hex { margin: 0; padding: 10px 12px; background: var(--surface); border-radius: 8px; font: 12px/1.5 var(--mono); overflow-x: auto; max-height: 360px; }
+  </style>
+</head>
+<body class="demo">
+  <div class="panel pick" id="drop">
+    <label class="file-label">Choose a file <input type="file" id="file"></label>
+    <span class="or">or drop one here, or try a sample:</span>
+    <span class="samples" id="samples">
+      <button class="btn" type="button" data-sample="png">PNG drawn on a canvas</button>
+      <button class="btn" type="button" data-sample="text">UTF-8 text</button>
+    </span>
+    <p class="hint">The file never leaves your device: everything is read in the browser.</p>
+  </div>
+  <div class="panel facts" id="facts" hidden>
+    <dl class="meta" id="meta"></dl>
+    <p class="label">First bytes · <span id="rowInfo"></span></p>
+    <pre class="hex" id="hex"></pre>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // Uint8Array.prototype.toHex / toBase64 are new: fall back when they are missing
+    const toHex = (bytes) => bytes.toHex?.() ?? Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const toBase64 = (bytes) => bytes.toBase64?.() ?? btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+
+    // A file format is often recognised by its first bytes, its "magic number"
+    const SIGNATURES = [
+      ['PNG image', [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+      ['JPEG image', [0xff, 0xd8, 0xff]],
+      ['GIF image', [0x47, 0x49, 0x46, 0x38]],
+      ['PDF document', [0x25, 0x50, 0x44, 0x46]],
+      ['ZIP archive (also .docx, .xlsx, .epub)', [0x50, 0x4b, 0x03, 0x04]],
+      ['UTF-8 text with a byte order mark', [0xef, 0xbb, 0xbf]],
+    ];
+    function detect(bytes) {
+      const match = SIGNATURES.find(([, sig]) => sig.every((b, i) => bytes[i] === b));
+      return match ? match[0] : 'unknown (no known signature)';
+    }
+
+    function pngSize(buffer) {
+      // A PNG starts with an IHDR chunk: width and height are 4-byte big-endian integers at 16 and 20
+      const view = new DataView(buffer);
+      return `${view.getUint32(16)} × ${view.getUint32(20)} px (read with a DataView, big-endian)`;
+    }
+
+    let current = null;          // { bytes } of the shown file, to redraw when the width changes
+    const narrow = matchMedia('(width < 560px)');
+    function drawHex() {
+      if (!current) return;
+      const perRow = narrow.matches ? 8 : 16;
+      const bytes = current.bytes.subarray(0, 512);
+      const lines = [];
+      for (let offset = 0; offset < bytes.length; offset += perRow) {
+        const row = bytes.subarray(offset, offset + perRow);
+        const hex = Array.from(row, (b) => b.toString(16).padStart(2, '0')).join(' ').padEnd(perRow * 3 - 1);
+        const ascii = Array.from(row, (b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.')).join('');
+        lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex}  ${ascii}`);
+      }
+      $('hex').textContent = lines.join('\n');
+      $('rowInfo').textContent = `${bytes.length} of ${current.bytes.length} bytes, ${perRow} per row`;
+    }
+    narrow.addEventListener('change', drawHex);
+
+    async function inspect(file) {
+      const buffer = await file.arrayBuffer();           // a Blob or File reads into an ArrayBuffer
+      const bytes = new Uint8Array(buffer);              // a view on the same memory, one byte per item
+      const kind = detect(bytes);
+      const rows = [
+        ['name', file.name ?? '(a Blob has no name)'],
+        ['size', `${file.size.toLocaleString('en')} bytes`],
+        ['type', file.type || '(none given)'],
+        ['detected', kind],
+      ];
+      if (kind === 'PNG image' && bytes.length >= 24) rows.push(['dimensions', pngSize(buffer)]);
+      if (file.lastModified) rows.push(['modified', new Date(file.lastModified).toLocaleString('en')]);
+      if (crypto.subtle) {
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+        rows.push(['SHA-256', toHex(digest)]);
+      } else {
+        rows.push(['SHA-256', 'crypto.subtle needs a secure context (https or localhost)']);
+      }
+      rows.push(['first 24 bytes, base64', toBase64(bytes.subarray(0, 24))]);
+      $('meta').replaceChildren(...rows.flatMap(([k, v]) => [
+        Object.assign(document.createElement('dt'), { textContent: k }),
+        Object.assign(document.createElement('dd'), { textContent: v }),
+      ]));
+      current = { bytes };
+      drawHex();
+      $('facts').hidden = false;
+    }
+
+    async function sample(kind) {
+      if (kind === 'text') {
+        return new File(['Hello, 世界 👋\nUTF-8 uses 1 to 4 bytes per character.\n'], 'hello.txt', { type: 'text/plain' });
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(0, 0, 64, 32);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('JS', 22, 22);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      return new File([blob], 'canvas.png', { type: blob.type });
+    }
+
+    $('file').addEventListener('change', () => { if ($('file').files[0]) inspect($('file').files[0]); });
+    $('samples').addEventListener('click', async (event) => {
+      const button = event.target.closest('button[data-sample]');
+      if (button) inspect(await sample(button.dataset.sample));
+    });
+    $('drop').addEventListener('dragover', (event) => {
+      event.preventDefault();
+      $('drop').classList.add('over');
+    });
+    $('drop').addEventListener('dragleave', () => $('drop').classList.remove('over'));
+    $('drop').addEventListener('drop', (event) => {
+      event.preventDefault();
+      $('drop').classList.remove('over');
+      const file = event.dataTransfer.files[0];
+      if (file) inspect(file);
+    });
+  </script>
+</body>
+</html>

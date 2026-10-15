@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 24-1 · Final: Read Image Sizes</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 24-1">
+    <script type="text/plain" class="code">
+      // Two tiny image headers, byte by byte (the rest of each file is left out)
+      const PNG = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,   // PNG signature
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,   // chunk length 13, type "IHDR"
+        0x00, 0x00, 0x02, 0x80, 0x00, 0x00, 0x01, 0xe0,   // width 640, height 480 (big-endian)
+      ]).buffer;
+      const GIF = new Uint8Array([
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61,               // "GIF89a"
+        0x40, 0x01, 0xc8, 0x00,                           // width 320, height 200 (little-endian)
+      ]).buffer;
+
+      // imageSize(buffer) returns { type, width, height } for a PNG or a GIF header:
+      // - PNG: starts with the 8 signature bytes; width and height are 32-bit big-endian at 16 and 20
+      // - GIF: starts with "GIF8"; width and height are 16-bit little-endian at 6 and 8
+      // Anything else: throw a TypeError('Unknown image format').
+      const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+      function imageSize(buffer) {
+        const bytes = new Uint8Array(buffer);
+        const view = new DataView(buffer);
+        if (PNG_SIGNATURE.every((b, i) => bytes[i] === b)) {
+          return { type: 'png', width: view.getUint32(16), height: view.getUint32(20) };   // big-endian is the default
+        }
+        if (new TextDecoder().decode(bytes.subarray(0, 4)) === 'GIF8') {
+          return { type: 'gif', width: view.getUint16(6, true), height: view.getUint16(8, true) };   // true: little-endian
+        }
+        throw new TypeError('Unknown image format');
+      }
+
+      console.log(imageSize(PNG), imageSize(GIF));
+    </script>
+    <script type="text/plain" class="tests">
+      test('reads a PNG header', () => assert.deepEqual(imageSize(PNG), { type: 'png', width: 640, height: 480 }));
+      test('reads a GIF header', () => assert.deepEqual(imageSize(GIF), { type: 'gif', width: 320, height: 200 }));
+      test('large sizes work too', () => {
+        const big = new Uint8Array(PNG.slice(0));
+        new DataView(big.buffer).setUint32(16, 100000);
+        assert.equal(imageSize(big.buffer).width, 100000);
+      });
+      test('rejects other data', () => {
+        const error = assert.throws(() => imageSize(new TextEncoder().encode('just some text, not an image').buffer));
+        assert.equal(error.name, 'TypeError');
+        assert.equal(error.message, 'Unknown image format');
+      });
+    </script>
+  </div>
+</body>
+</html>
