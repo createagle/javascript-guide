@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 4-1 · Start: FizzBuzz</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 4-1">
+    <script type="text/plain" class="code">
+      // Return an array for the numbers 1..n:
+      // 'Fizz' for multiples of 3, 'Buzz' for multiples of 5,
+      // 'FizzBuzz' for multiples of both, and the number itself otherwise.
+      function fizzBuzz(n) {
+        const result = [];
+        // your loop here
+        return result;
+      }
+
+      console.log(fizzBuzz(15));
+    </script>
+    <script type="text/plain" class="tests">
+      test('has n items', () => assert.equal(fizzBuzz(15).length, 15));
+      test('keeps plain numbers as numbers', () => assert.deepEqual(fizzBuzz(2), [1, 2]));
+      test('replaces multiples of 3 and 5', () => {
+        const r = fizzBuzz(15);
+        assert.equal(r[2], 'Fizz');
+        assert.equal(r[4], 'Buzz');
+        assert.equal(r[14], 'FizzBuzz');
+      });
+      test('n = 0 gives an empty array', () => assert.deepEqual(fizzBuzz(0), []));
+    </script>
+  </div>
+</body>
+</html>

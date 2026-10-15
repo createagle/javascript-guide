@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>4-2 switch and Its Alternatives</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="switch">
+    <script type="text/plain" class="code" data-name="Fall-through">
+      // Without break, execution "falls through" into the next case
+      function describe(day) {
+        switch (day) {
+          case 'Sat':
+          case 'Sun':
+            console.log(day, 'is the weekend');
+            break;
+          case 'Fri':
+            console.log(day, 'is almost the weekend');
+            // no break here!
+          default:
+            console.log(day, 'is a weekday');
+        }
+      }
+
+      describe('Sun');
+      describe('Fri');
+      describe('Tue');
+    </script>
+    <script type="text/plain" class="code" data-name="switch uses ===">
+      function label(code) {
+        switch (code) {
+          case 1: return 'one (number)';
+          case '1': return 'one (string)';
+          default: return 'unknown';
+        }
+      }
+
+      console.log(label(1), '|', label('1'), '|', label(true));
+    </script>
+    <script type="text/plain" class="code" data-name="A lookup object instead">
+      // A plain object maps keys to results with less code than switch
+      const statusText = {
+        200: 'OK',
+        404: 'Not Found',
+        500: 'Internal Server Error',
+      };
+
+      for (const status of [200, 404, 418]) {
+        console.log(status, statusText[status] ?? 'Unknown status');
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="if…else ranges">
+      // Ranges read best as an if…else chain, checked from the top
+      function shipping(weightKg) {
+        if (weightKg <= 0) return 'invalid';
+        else if (weightKg < 1) return '$5';
+        else if (weightKg < 5) return '$9';
+        else return '$15';
+      }
+
+      console.log([0, 0.5, 1, 4.9, 12].map(shipping));
+    </script>
+  </div>
+</body>
+</html>

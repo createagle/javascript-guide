@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>4-1 Loop Stepper</title>
+  <style>
+    .stage { width: min(860px, 100%); }
+    .stage > * { flex: 1 1 320px; }
+    .side { display: grid; gap: 16px; }
+    .code-list { margin: 0; padding: 12px 12px 12px 36px; font: 13px/1.5 var(--mono); white-space: pre; overflow-x: auto; }
+    .code-list li { padding: 4px 6px; border-radius: 6px; }
+    .code-list li.current { background: color-mix(in oklch, var(--accent) 18%, transparent); font-weight: 600; }
+    #vars { border-collapse: collapse; font: 13px var(--mono); }
+    #vars th { text-align: left; padding: 2px 16px 2px 0; color: var(--muted); font-weight: 600; }
+    .note { margin: 12px 0 0; min-height: 3em; font-size: 14px; }
+    #out { min-height: 5em; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="program">Loop</label>
+    <select id="program" class="btn"></select>
+    <button class="btn" id="reset" type="button">Restart</button>
+    <button class="btn" id="play" type="button">Play</button>
+    <button class="btn btn-primary" id="step" type="button">Step</button>
+  </div>
+  <div class="stage">
+    <ol class="panel code-list" id="code"></ol>
+    <div class="side">
+      <div class="panel">
+        <p class="label">Variables</p>
+        <table id="vars"></table>
+        <p class="note" id="note" aria-live="polite"></p>
+      </div>
+      <div class="panel">
+        <p class="label">Console</p>
+        <pre class="code" id="out"></pre>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Each program runs for real inside a generator that pauses before every line it executes:
+    // yield [line index, variables, note]. Output is pushed to `log`.
+    const programs = {
+      'for': {
+        code: [
+          'let total = 0;',
+          'for (let i = 1; i <= 3; i++) {',
+          '  total += i;',
+          '}',
+          'console.log(total);',
+        ],
+        *run(log) {
+          let total = 0;
+          yield [0, { total }, 'Declare total'];
+          let i = 1;
+          yield [1, { total, i }, 'Initialize: let i = 1 (runs once)'];
+          while (true) {
+            yield [1, { total, i }, `Check: i <= 3 → ${i <= 3}`];
+            if (!(i <= 3)) break;
+            total += i;
+            yield [2, { total, i }, `Body: total is now ${total}`];
+            i++;
+            yield [1, { total, i }, `Update: i++ → ${i}`];
+          }
+          log(total);
+          yield [4, { total }, 'The loop is over; i no longer exists'];
+        },
+      },
+      'while': {
+        code: [
+          'let n = 3;',
+          'while (n > 0) {',
+          '  console.log(n);',
+          '  n--;',
+          '}',
+          "console.log('Liftoff');",
+        ],
+        *run(log) {
+          let n = 3;
+          yield [0, { n }, 'Declare n'];
+          while (true) {
+            yield [1, { n }, `Check: n > 0 → ${n > 0}`];
+            if (!(n > 0)) break;
+            log(n);
+            yield [2, { n }, `Print ${n}`];
+            n--;
+            yield [3, { n }, `n-- → ${n}`];
+          }
+          log('Liftoff');
+          yield [5, { n }, 'The condition was false, so the loop ended'];
+        },
+      },
+      'for…of': {
+        code: [
+          "const fruits = ['apple', 'pear', 'fig'];",
+          'for (const fruit of fruits) {',
+          '  console.log(fruit.toUpperCase());',
+          '}',
+        ],
+        *run(log) {
+          const fruits = ['apple', 'pear', 'fig'];
+          yield [0, { fruits }, 'Create the array'];
+          for (const fruit of fruits) {
+            yield [1, { fruits, fruit }, `Take the next value: fruit = '${fruit}'`];
+            log(fruit.toUpperCase());
+            yield [2, { fruits, fruit }, `Print '${fruit.toUpperCase()}'`];
+          }
+          yield [1, { fruits }, 'No values left: the loop ends'];
+        },
+      },
+      'break and continue': {
+        code: [
+          'const scores = [7, -1, 9, 0, 4];',
+          'for (const score of scores) {',
+          '  if (score < 0) continue;',
+          '  if (score === 0) break;',
+          '  console.log(score);',
+          '}',
+        ],
+        *run(log) {
+          const scores = [7, -1, 9, 0, 4];
+          yield [0, { scores }, 'Create the array'];
+          for (const score of scores) {
+            yield [1, { scores, score }, `score = ${score}`];
+            yield [2, { scores, score }, `score < 0 → ${score < 0}` + (score < 0 ? ': continue skips to the next value' : '')];
+            if (score < 0) continue;
+            yield [3, { scores, score }, `score === 0 → ${score === 0}` + (score === 0 ? ': break leaves the loop, 4 is never visited' : '')];
+            if (score === 0) break;
+            log(score);
+            yield [4, { scores, score }, `Print ${score}`];
+          }
+          yield [5, { scores }, 'Done'];
+        },
+      },
+    };
+
+    const select = document.getElementById('program');
+    const codeList = document.getElementById('code');
+    const varsTable = document.getElementById('vars');
+    const note = document.getElementById('note');
+    const out = document.getElementById('out');
+    const stepBtn = document.getElementById('step');
+    const playBtn = document.getElementById('play');
+    let iter, lines, finished, timer = 0;
+
+    for (const name of Object.keys(programs)) select.add(new Option(name, name));
+
+    const fmt = (v) => (Array.isArray(v) ? `[${v.map(fmt).join(', ')}]` : typeof v === 'string' ? `'${v}'` : String(v));
+
+    function show(line, vars, text) {
+      [...codeList.children].forEach((li, i) => li.classList.toggle('current', i === line));
+      varsTable.replaceChildren(...Object.entries(vars).map(([k, v]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<th></th><td></td>';
+        tr.cells[0].textContent = k;
+        tr.cells[1].textContent = fmt(v);
+        return tr;
+      }));
+      note.textContent = text;
+    }
+
+    function reset() {
+      stop();
+      const program = programs[select.value];
+      codeList.replaceChildren(...program.code.map((line) => Object.assign(document.createElement('li'), { textContent: line })));
+      lines = [];
+      out.textContent = '';
+      finished = false;
+      iter = program.run((value) => { lines.push(fmt(value).replace(/^'|'$/g, '')); });
+      show(-1, {}, 'Press Step to run the first line');
+      stepBtn.disabled = false;
+      playBtn.disabled = false;
+    }
+
+    function step() {
+      const { value, done } = iter.next();
+      out.textContent = lines.join('\n');
+      if (done) {
+        finished = true;
+        show(-1, {}, 'Finished');
+        stepBtn.disabled = true;
+        playBtn.disabled = true;
+        stop();
+        return;
+      }
+      show(...value);
+    }
+
+    function stop() {
+      clearInterval(timer);
+      timer = 0;
+      playBtn.textContent = 'Play';
+    }
+
+    stepBtn.addEventListener('click', step);
+    playBtn.addEventListener('click', () => {
+      if (timer) return stop();
+      playBtn.textContent = 'Pause';
+      timer = setInterval(step, 700);
+    });
+    document.getElementById('reset').addEventListener('click', reset);
+    select.addEventListener('change', reset);
+    reset();
+  </script>
+</body>
+</html>
