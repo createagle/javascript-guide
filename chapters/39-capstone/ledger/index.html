@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <link rel="stylesheet" href="app.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#2563eb">
+  <title>Pocket Ledger</title>
+  <script type="module" src="src/main.js"></script>
+</head>
+<body class="demo">
+  <main class="app">
+    <div class="app-bar">
+      <span class="app-name">Pocket Ledger</span>
+      <span class="status" id="status" role="status"></span>
+    </div>
+    <section class="panel" aria-label="New entry">
+      <entry-form></entry-form>
+    </section>
+    <section class="panel" aria-label="This month">
+      <div class="filters">
+        <label>Month <input type="month" id="month" required></label>
+        <label>Show in <select id="currency"><option>USD</option></select></label>
+      </div>
+      <ledger-summary id="summary"></ledger-summary>
+    </section>
+    <section class="panel entries" aria-label="Entries">
+      <entry-list id="list"></entry-list>
+    </section>
+    <div class="tools" id="tools">
+      <button class="btn" type="button" data-action="sample">Add sample data</button>
+      <button class="btn" type="button" data-action="export">Export</button>
+      <label class="btn">Import <input type="file" id="import" accept=".json,application/json"></label>
+      <button class="btn" type="button" data-action="clear">Clear all</button>
+    </div>
+    <p class="message" id="message" role="status"></p>
+  </main>
+</body>
+</html>

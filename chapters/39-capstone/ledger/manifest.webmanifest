@@ -1,0 +1,11 @@
+{
+  "name": "Pocket Ledger",
+  "short_name": "Ledger",
+  "description": "A small expense tracker that works offline",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

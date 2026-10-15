@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>39-2 Offline Inspector</title>
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; width: min(880px, 100%); align-items: start; }
+    .grid .wide { grid-column: 1 / -1; }
+    .grid .label { margin: 0 0 8px; }
+    .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+    .rows li { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr); gap: 8px; }
+    #cache li { grid-template-columns: minmax(0, 12em) minmax(0, 1fr); }
+    .key { color: var(--muted); overflow-wrap: anywhere; }
+    .value { overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; }
+    .value.good { color: var(--good); }
+    .value.warn { color: var(--warn); }
+    .value.bad { color: var(--bad); }
+    .note { margin: 0; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <a class="btn btn-primary" href="ledger/" target="_blank" rel="noopener">Open Pocket Ledger ↗</a>
+    <button class="btn" type="button" data-action="refresh">Refresh</button>
+    <button class="btn" type="button" data-action="persist">Ask for persistent storage</button>
+    <button class="btn" type="button" data-action="caches">Delete the app's caches</button>
+    <button class="btn" type="button" data-action="unregister">Unregister its service worker</button>
+  </div>
+  <div class="grid">
+    <section class="panel" aria-labelledby="sw-title">
+      <h2 class="label" id="sw-title">Service worker</h2>
+      <ul class="rows" id="sw"></ul>
+    </section>
+    <section class="panel" aria-labelledby="db-title">
+      <h2 class="label" id="db-title">IndexedDB</h2>
+      <ul class="rows" id="db"></ul>
+    </section>
+    <section class="panel" aria-labelledby="storage-title">
+      <h2 class="label" id="storage-title">Storage</h2>
+      <ul class="rows" id="storage"></ul>
+    </section>
+    <section class="panel wide" aria-labelledby="cache-title">
+      <h2 class="label" id="cache-title">Cache storage</h2>
+      <ul class="rows" id="cache"></ul>
+    </section>
+  </div>
+  <p class="note" id="note" role="status"></p>
+  <script type="module">
+    // Looks at what Pocket Ledger keeps on this device, from outside the app (same origin, so same storage)
+    const $ = (id) => document.getElementById(id);
+    const APP = new URL('ledger/', location.href);
+    const DB_NAME = 'pocket-ledger';
+
+    function rows(id, items) {
+      $(id).replaceChildren(...items.map(([key, value, tone]) => {
+        const li = document.createElement('li');
+        li.append(Object.assign(document.createElement('span'), { className: 'key', textContent: key }),
+          Object.assign(document.createElement('span'), { className: `value ${tone ?? ''}`, textContent: value }));
+        return li;
+      }));
+    }
+
+    const kb = (bytes) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    const short = (url) => url.startsWith(APP.href) ? url.slice(APP.href.length) || './' : new URL(url).pathname;
+
+    async function showServiceWorker() {
+      if (!('serviceWorker' in navigator)) return rows('sw', [['Support', 'Not supported in this browser', 'bad']]);
+      const registration = await navigator.serviceWorker.getRegistration(APP.href);
+      if (!registration) return rows('sw', [['Registered', 'No: open the app once to install it', 'warn']]);
+      const worker = registration.active ?? registration.waiting ?? registration.installing;
+      rows('sw', [
+        ['Scope', short(registration.scope)],
+        ['Script', short(worker?.scriptURL ?? '')],
+        ['State', worker?.state ?? 'unknown', worker?.state === 'activated' ? 'good' : 'warn'],
+        ['Update waiting', registration.waiting ? 'Yes' : 'No'],
+      ]);
+    }
+
+    async function showDatabase() {
+      // indexedDB.open() on a database that does not exist would create an empty one,
+      // and the app's upgrade code would then never run. So check the list first.
+      if (!indexedDB.databases) return rows('db', [['Databases', 'Listing is not supported here', 'warn']]);
+      const info = (await indexedDB.databases()).find((db) => db.name === DB_NAME);
+      if (!info) return rows('db', [[DB_NAME, 'Not created yet', 'warn']]);
+      const db = await new Promise((resolve, reject) => {
+        const open = indexedDB.open(DB_NAME);
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => reject(open.error);
+      });
+      try {
+        const names = [...db.objectStoreNames];
+        const counts = await Promise.all(names.map((name) => new Promise((resolve, reject) => {
+          const request = db.transaction(name).objectStore(name).count();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        })));
+        rows('db', [['Database', `${DB_NAME} (version ${db.version})`], ...names.map((name, i) => [`Store “${name}”`, `${counts[i]} records`])]);
+      } finally {
+        db.close();   // do not block the app if it needs to upgrade
+      }
+    }
+
+    async function showStorage() {
+      if (!navigator.storage?.estimate) return rows('storage', [['Estimate', 'Not supported here', 'warn']]);
+      const { usage, quota } = await navigator.storage.estimate();
+      const persisted = await navigator.storage.persisted?.();
+      rows('storage', [
+        ['Used by this site', kb(usage)],
+        ['Quota', kb(quota)],
+        ['Persistent', persisted ? 'Yes: kept even when space is low' : 'No: may be cleared when space is low', persisted ? 'good' : 'warn'],
+      ]);
+    }
+
+    async function showCaches() {
+      if (!('caches' in window)) return rows('cache', [['Cache API', 'Not available here', 'bad']]);
+      const names = (await caches.keys()).filter((name) => name.startsWith('pocket-ledger-'));
+      if (!names.length) return rows('cache', [['Caches', 'None yet', 'warn']]);
+      const items = [];
+      for (const name of names) {
+        const requests = await (await caches.open(name)).keys();
+        items.push([name, `${requests.length} files`, 'good'], ...requests.map((request) => ['', short(request.url)]));
+      }
+      rows('cache', items);
+    }
+
+    async function refresh() {
+      const results = await Promise.allSettled([showServiceWorker(), showDatabase(), showStorage(), showCaches()]);
+      const failed = results.find((result) => result.status === 'rejected');
+      $('note').textContent = failed ? `Something could not be read: ${failed.reason.message}` : `Checked at ${new Date().toLocaleTimeString()}.`;
+    }
+
+    document.querySelector('.controls').addEventListener('click', async (event) => {
+      const action = event.target.closest('button')?.dataset.action;
+      if (!action) return;
+      let message = '';
+      if (action === 'persist') {
+        const granted = await navigator.storage?.persist?.();
+        message = granted ? 'Persistent storage granted.' : 'The browser did not grant persistent storage (it decides by itself).';
+      } else if (action === 'caches') {
+        for (const name of await caches.keys()) if (name.startsWith('pocket-ledger-')) await caches.delete(name);
+      } else if (action === 'unregister') {
+        await (await navigator.serviceWorker?.getRegistration(APP.href))?.unregister();
+      }
+      await refresh();
+      if (message) $('note').textContent = message;
+    });
+    refresh();
+  </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 39-2 · Start: Budget Alerts</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 39-2">
+    <script type="text/plain" class="code">
+      // checkBudgets(entries, budgets, month) compares spending with monthly budgets.
+      // - entries: [{ type: 'expense' | 'income', amount (cents), category, date: 'YYYY-MM-DD' }]
+      // - budgets: { Food: 30000, Fun: 10000, ... } in cents
+      // - month: 'YYYY-MM'; only expenses in that month count
+      // Returns one row per budget category: { category, limit, spent, left, percent, status }
+      // - left = limit - spent (negative when over); percent = Math.round(spent / limit * 100)
+      // - status: 'over' if spent > limit, 'warning' if spent >= 80% of limit, otherwise 'ok'
+      // - sorted by percent, highest first; equal percents by category name
+      // Categories without a budget are not listed. All amounts stay in whole cents.
+      function checkBudgets(entries, budgets, month) {
+        return Object.keys(budgets).map((category) => {
+          const limit = budgets[category];
+          const spent = entries
+            .filter((e) => e.category === category)
+            .reduce((sum, e) => sum + e.amount, 0);
+          const percent = spent / limit * 100;
+          return { category, limit, spent, left: limit - spent, percent, status: spent > limit ? 'over' : 'ok' };
+        });
+      }
+
+      const entries = [
+        { type: 'expense', amount: 4250, category: 'Food', date: '2026-10-03' },
+        { type: 'expense', amount: 21000, category: 'Food', date: '2026-10-20' },
+        { type: 'expense', amount: 6400, category: 'Fun', date: '2026-10-08' },
+        { type: 'expense', amount: 9000, category: 'Fun', date: '2026-09-28' },
+        { type: 'income', amount: 320000, category: 'Salary', date: '2026-10-01' },
+      ];
+      console.table(checkBudgets(entries, { Food: 30000, Fun: 10000, Health: 5000 }, '2026-10'));
+    </script>
+    <script type="text/plain" class="tests">
+      const data = [
+        { type: 'expense', amount: 4250, category: 'Food', date: '2026-10-03' },
+        { type: 'expense', amount: 21000, category: 'Food', date: '2026-10-20' },
+        { type: 'expense', amount: 6400, category: 'Fun', date: '2026-10-08' },
+        { type: 'expense', amount: 9000, category: 'Fun', date: '2026-09-28' },
+        { type: 'expense', amount: 7000, category: 'Fun', date: '2026-10-30' },
+        { type: 'income', amount: 5000, category: 'Health', date: '2026-10-02' },
+      ];
+      const limits = { Food: 30000, Fun: 10000, Health: 5000 };
+      const byCategory = (rows) => Object.fromEntries(rows.map((r) => [r.category, r]));
+
+      test('only expenses of the given month count', () => {
+        const rows = byCategory(checkBudgets(data, limits, '2026-10'));
+        assert.equal(rows.Food.spent, 25250);
+        assert.equal(rows.Fun.spent, 13400);
+        assert.equal(rows.Health.spent, 0, 'income is not spending');
+      });
+      test('left, percent and status', () => {
+        const rows = byCategory(checkBudgets(data, limits, '2026-10'));
+        assert.deepEqual(rows.Fun, { category: 'Fun', limit: 10000, spent: 13400, left: -3400, percent: 134, status: 'over' });
+        assert.deepEqual(rows.Food, { category: 'Food', limit: 30000, spent: 25250, left: 4750, percent: 84, status: 'warning' });
+        assert.equal(rows.Health.status, 'ok');
+      });
+      test('exactly 80% is a warning, exactly 100% is not over', () => {
+        const rows = byCategory(checkBudgets([
+          { type: 'expense', amount: 800, category: 'A', date: '2026-10-01' },
+          { type: 'expense', amount: 1000, category: 'B', date: '2026-10-01' },
+          { type: 'expense', amount: 799, category: 'C', date: '2026-10-01' },
+        ], { A: 1000, B: 1000, C: 1000 }, '2026-10'));
+        assert.equal(rows.A.status, 'warning');
+        assert.equal(rows.B.status, 'warning');
+        assert.equal(rows.C.status, 'ok');
+      });
+      test('sorted by percent, highest first', () => {
+        assert.deepEqual(checkBudgets(data, limits, '2026-10').map((r) => r.category), ['Fun', 'Food', 'Health']);
+      });
+      test('a month prefix must match the whole month', () => {
+        const rows = checkBudgets([{ type: 'expense', amount: 100, category: 'Food', date: '2026-01-15' }], { Food: 1000 }, '2026-1');
+        assert.equal(rows[0].spent, 0, "'2026-1' is not '2026-01'");
+      });
+    </script>
+  </div>
+</body>
+</html>

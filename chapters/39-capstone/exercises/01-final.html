@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 39-1 · Final: CSV Export and Import</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 39-1">
+    <script type="text/plain" class="code">
+      // CSV export and import for Pocket Ledger entries.
+      // toCSV(entries) → text with a header line and one line per entry:
+      //   date,type,category,amount,note
+      //   2026-10-03,expense,Food,42.50,Groceries
+      // - amount is in dollars with exactly two decimals (entries store whole cents: 4250 → 42.50)
+      // - a field that contains a comma, a double quote or a line break is wrapped in double quotes,
+      //   and each double quote inside it is doubled: He said "hi" → "He said ""hi"""
+      // - lines end with \r\n (what the CSV standard, RFC 4180, asks for)
+      // fromCSV(text) reads such text back into entries { date, type, category, amount (cents), note }:
+      // - it accepts \n or \r\n line endings, quoted fields (which may contain commas, quotes and line breaks)
+      //   and ignores the header and empty lines
+      const COLUMNS = ['date', 'type', 'category', 'amount', 'note'];
+
+      function field(value) {
+        const text = String(value);
+        return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+      }
+
+      function toCSV(entries) {
+        const lines = entries.map((e) =>
+          [e.date, e.type, e.category, (e.amount / 100).toFixed(2), e.note ?? ''].map(field).join(','));
+        return [COLUMNS.join(','), ...lines].join('\r\n');
+      }
+
+      // Reads character by character, because commas and line breaks inside quotes are part of the field
+      function parseRows(text) {
+        const rows = [];
+        let row = [];
+        let value = '';
+        let quoted = false;
+        for (let i = 0; i < text.length; i++) {
+          const c = text[i];
+          if (quoted) {
+            if (c === '"' && text[i + 1] === '"') { value += '"'; i++; }   // "" inside quotes is one "
+            else if (c === '"') quoted = false;
+            else value += c;
+          } else if (c === '"') {
+            quoted = true;
+          } else if (c === ',') {
+            row.push(value);
+            value = '';
+          } else if (c === '\n' || c === '\r') {
+            if (c === '\r' && text[i + 1] === '\n') i++;
+            row.push(value);
+            rows.push(row);
+            row = [];
+            value = '';
+          } else {
+            value += c;
+          }
+        }
+        if (value !== '' || row.length) rows.push([...row, value]);
+        return rows.filter((r) => r.some((cell) => cell !== ''));
+      }
+
+      function fromCSV(text) {
+        return parseRows(text).slice(1).map(([date, type, category, amount, note = '']) => ({
+          date,
+          type,
+          category,
+          amount: Math.round(Number(amount) * 100),   // 0.29 * 100 is 28.999999999999996
+          note,
+        }));
+      }
+
+      const entries = [
+        { date: '2026-10-03', type: 'expense', category: 'Food', amount: 4250, note: 'Groceries' },
+        { date: '2026-10-08', type: 'expense', category: 'Fun', amount: 6400, note: 'Tickets for "Hamlet", row 3' },
+      ];
+      const csv = toCSV(entries);
+      console.log(csv);
+      console.log(fromCSV(csv));
+    </script>
+    <script type="text/plain" class="tests">
+      const sample = [
+        { date: '2026-10-03', type: 'expense', category: 'Food', amount: 4250, note: 'Groceries' },
+        { date: '2026-10-05', type: 'income', category: 'Gift', amount: 2000, note: '' },
+      ];
+      test('a header, two decimals and CRLF line endings', () => {
+        assert.equal(toCSV(sample), 'date,type,category,amount,note\r\n2026-10-03,expense,Food,42.50,Groceries\r\n2026-10-05,income,Gift,20.00,');
+      });
+      test('fields with commas, quotes or line breaks are quoted', () => {
+        const csv = toCSV([{ date: '2026-10-08', type: 'expense', category: 'Fun', amount: 6400, note: 'Tickets for "Hamlet", row 3' }]);
+        assert.equal(csv.split('\r\n')[1], '2026-10-08,expense,Fun,64.00,"Tickets for ""Hamlet"", row 3"');
+      });
+      test('fromCSV reads quoted fields, line breaks inside quotes and LF endings', () => {
+        const text = 'date,type,category,amount,note\n2026-10-01,expense,Food,3.10,"Tea, ""green""\nand cake"\n\n';
+        assert.deepEqual(fromCSV(text), [{ date: '2026-10-01', type: 'expense', category: 'Food', amount: 310, note: 'Tea, "green"\nand cake' }]);
+      });
+      test('amounts become exact cents', () => {
+        assert.equal(fromCSV('h\r\n2026-10-01,expense,Food,0.29,x')[0].amount, 29);
+        assert.equal(fromCSV('h\r\n2026-10-01,expense,Food,1.15,x')[0].amount, 115);
+      });
+      test('round trip: fromCSV(toCSV(entries)) gives the entries back', () => {
+        const tricky = [...sample, { date: '2026-10-09', type: 'expense', category: 'Other', amount: 1, note: 'a,b "c"\r\nd' }];
+        assert.deepEqual(fromCSV(toCSV(tricky)), tricky);
+      });
+    </script>
+  </div>
+</body>
+</html>
