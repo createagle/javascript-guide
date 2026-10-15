@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 10-3 · Start: Who Is this?</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 10-3">
+    <script type="text/plain" class="code">
+      // For each call below, write what this is inside who() or the arrow:
+      // 'counter', 'other', 'undefined' or 'new object'. The tests check your answers.
+      const counter = {
+        name: 'counter',
+        who() { return this; },
+        later() { return [1].map(() => this)[0]; },
+      };
+      const other = { name: 'other' };
+      const who = counter.who;
+      function Named() { this.name = 'new object'; }
+
+      const answers = {
+        q1: '?', // counter.who()
+        q2: '?', // who()
+        q3: '?', // who.call(other)
+        q4: '?', // counter.who.bind(other).call(counter)
+        q5: '?', // new Named()
+        q6: '?', // [1].map(counter.who)[0]
+        q7: '?', // counter.later()
+      };
+    </script>
+    <script type="text/plain" class="tests">
+      const nameOf = (value) => (value === undefined ? 'undefined' : value.name);
+      test('q1 counter.who()', () => assert.equal(answers.q1, nameOf(counter.who())));
+      test('q2 who()', () => assert.equal(answers.q2, nameOf(who())));
+      test('q3 who.call(other)', () => assert.equal(answers.q3, nameOf(who.call(other))));
+      test('q4 bind, then call', () => assert.equal(answers.q4, nameOf(counter.who.bind(other).call(counter))));
+      test('q5 new Named()', () => assert.equal(answers.q5, nameOf(new Named())));
+      test('q6 a method as a callback', () => assert.equal(answers.q6, nameOf([1].map(counter.who)[0])));
+      test('q7 an arrow inside a method', () => assert.equal(answers.q7, nameOf(counter.later())));
+    </script>
+  </div>
+</body>
+</html>

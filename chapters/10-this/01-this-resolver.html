@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>10-1 What Is this?</title>
+  <style>
+    .stage { width: min(920px, 100%); }
+    .stage > * { flex: 1 1 340px; }
+    #case { max-width: 100%; }
+    .result-label { margin-top: 16px; }
+    .result { margin: 0; font: 600 16px var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+    .hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+    .flow { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14px; }
+    .flow li { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
+    .flow .answer { display: block; font-size: 13px; }
+    .flow .no { color: var(--muted); }
+    .flow .yes { border: 2px solid var(--accent); background: color-mix(in oklch, var(--accent) 10%, var(--bg)); }
+    .flow .yes .answer { color: var(--accent); font-weight: 600; }
+    .flow .skip { opacity: 0.4; }
+    .note { margin: 12px 0 0; font-size: 14px; min-height: 4.5em; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="case">Call</label>
+    <select id="case" class="btn"></select>
+    <button class="btn" id="prev" type="button">Previous</button>
+    <button class="btn btn-primary" id="next" type="button">Next</button>
+  </div>
+  <div class="stage">
+    <div class="panel">
+      <p class="label">Code</p>
+      <pre class="code" id="code"></pre>
+      <p class="label result-label">this is</p>
+      <p class="result" id="result" aria-live="polite"></p>
+      <p class="hint">Measured live: the page runs this exact code when you pick it.</p>
+    </div>
+    <div class="panel">
+      <p class="label">Ask in order, stop at the first yes</p>
+      <ol class="flow" id="flow"></ol>
+      <p class="note" id="note"></p>
+    </div>
+  </div>
+  <script type="module">
+    // A module: strict mode, and this at the top level is undefined
+    const counter = {
+      name: 'counter',
+      who() { return this; },
+      later() { return [1].map(() => this)[0]; },
+      arrow: () => this,
+    };
+    const other = { name: 'other' };
+    function Thing() { this.name = 'thing'; }
+
+    const QUESTIONS = [
+      ['arrow', 'Is it an arrow function?', 'this comes from the code around the arrow; call, bind and new cannot change it'],
+      ['new', 'Is it called with new?', 'this is the brand-new object'],
+      ['bound', 'Is it a bound function (made by bind)?', 'this is the value given to bind'],
+      ['explicit', 'Does the caller pass this in (call, apply, a thisArg, the browser)?', 'this is the value passed in'],
+      ['method', 'Is it called as obj.method()?', 'this is the object before the dot'],
+      ['default', 'None of the above', 'this is undefined in strict mode, globalThis in sloppy mode'],
+    ];
+
+    const CASES = [
+      { label: 'Method call', stop: 'method', run: () => counter.who(),
+        code: "const counter = {\n  name: 'counter',\n  who() { return this; },\n};\n\ncounter.who();",
+        note: 'The call is written counter.who(), with counter before the dot, so this is counter.' },
+      { label: 'Method pulled off the object', stop: 'default', run: () => { const who = counter.who; return who(); },
+        code: 'const who = counter.who;\nwho();',
+        note: 'Same function, but this call has nothing in front of it. this is decided by the call, not by where the function came from.' },
+      { label: 'Same, in sloppy mode', stop: 'default', run: () => { const who = new Function('return this'); return who(); },
+        code: "// new Function always makes a sloppy-mode function\nconst who = new Function('return this');\nwho();",
+        note: 'Without strict mode, the default binding falls back to the global object. Modules and classes are always strict, so in modern code this is undefined instead.' },
+      { label: 'call()', stop: 'explicit', run: () => counter.who.call(other),
+        code: "const other = { name: 'other' };\n\ncounter.who.call(other);",
+        note: 'call runs the function once with this set to its first argument. apply does the same, taking the arguments as an array.' },
+      { label: 'bind()', stop: 'bound', run: () => { const bound = counter.who.bind(other); return bound(); },
+        code: 'const bound = counter.who.bind(other);\nbound();',
+        note: 'bind does not call anything. It returns a new function whose this is fixed to other.' },
+      { label: 'bind() beats call()', stop: 'bound', run: () => { const bound = counter.who.bind(other); return bound.call(counter); },
+        code: 'const bound = counter.who.bind(other);\nbound.call(counter);',
+        note: 'Once bound, always bound: call, apply and a second bind cannot change this.' },
+      { label: 'new', stop: 'new', run: () => new Thing(),
+        code: "function Thing() {\n  this.name = 'thing';\n}\n\nnew Thing();",
+        note: 'new creates an empty object, runs the function with this set to it, and returns it (chapter 11 has the details).' },
+      { label: 'new beats bind()', stop: 'new', run: () => { const BoundThing = Thing.bind(other); return new BoundThing(); },
+        code: 'const BoundThing = Thing.bind(other);\nnew BoundThing();',
+        note: 'new ignores the bound this and makes a fresh object. other is left untouched.' },
+      { label: 'Arrow in an object literal', stop: 'arrow', run: () => counter.arrow(),
+        code: "const counter = {\n  name: 'counter',\n  arrow: () => this,\n};\n\ncounter.arrow();",
+        note: 'An object literal is not a function, so it does not give the arrow a this. The arrow takes this from the top level of this module, where it is undefined.' },
+      { label: 'Arrow inside a method', stop: 'arrow', run: () => counter.later(),
+        code: "const counter = {\n  name: 'counter',\n  later() {\n    return [1].map(() => this)[0];\n  },\n};\n\ncounter.later();",
+        note: 'The arrow takes this from later(), which was called as counter.later(). This is why arrows are the usual choice for callbacks inside methods.' },
+      { label: 'Method as a callback', stop: 'default', run: () => [1].map(counter.who)[0],
+        code: '[1].map(counter.who)[0];',
+        note: 'map receives just the function and calls it with nothing in front. Only the function was passed; the counter before the dot was not.' },
+      { label: 'Callback with a thisArg', stop: 'explicit', run: () => [1].map(counter.who, other)[0],
+        code: '[1].map(counter.who, other)[0];',
+        note: 'Most array methods take an optional thisArg after the callback and pass it in as this.' },
+      { label: 'Event listener', stop: 'explicit',
+        run: () => {
+          const button = document.createElement('button');
+          let seen;
+          button.addEventListener('click', function () { seen = this; });
+          button.click();
+          return seen;
+        },
+        code: "button.addEventListener('click', function () {\n  console.log(this);\n});\nbutton.click();",
+        note: 'The browser calls a regular-function listener with this set to the element the listener is on (event.currentTarget). An arrow listener would keep the outer this instead.' },
+    ];
+
+    function describe(value) {
+      if (value === undefined) return 'undefined';
+      if (value === globalThis) return 'globalThis (the window object)';
+      if (value instanceof Element) return `<${value.localName}>, the element the listener is on`;
+      if (value instanceof Thing) return `a new Thing object { name: '${value.name}' }`;
+      return value.name;
+    }
+
+    const $ = (id) => document.getElementById(id);
+    CASES.forEach((c, i) => $('case').add(new Option(`${i + 1}. ${c.label}`, i)));
+
+    function render() {
+      const i = Number($('case').value);
+      const c = CASES[i];
+      $('code').textContent = c.code;
+      $('result').textContent = describe(c.run());
+      const stopAt = QUESTIONS.findIndex(([key]) => key === c.stop);
+      $('flow').replaceChildren(...QUESTIONS.map(([key, question, answer], n) => {
+        const li = document.createElement('li');
+        const state = n < stopAt ? 'no' : n === stopAt ? 'yes' : 'skip';
+        li.className = state;
+        const q = Object.assign(document.createElement('span'), { textContent: question });
+        const a = Object.assign(document.createElement('span'), { className: 'answer' });
+        a.textContent = state === 'no' ? 'No' : state === 'yes' ? (key === 'default' ? answer : 'Yes: ' + answer) : '';
+        li.append(q, a);
+        return li;
+      }));
+      $('note').textContent = c.note;
+      $('prev').disabled = i === 0;
+      $('next').disabled = i === CASES.length - 1;
+    }
+    $('case').addEventListener('change', render);
+    $('prev').addEventListener('click', () => { $('case').selectedIndex--; render(); });
+    $('next').addEventListener('click', () => { $('case').selectedIndex++; render(); });
+    render();
+  </script>
+</body>
+</html>

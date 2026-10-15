@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 10-2 · Start: Write bind() Yourself</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 10-2">
+    <script type="text/plain" class="code">
+      // myBind(fn, thisArg, ...preset) works like fn.bind(thisArg, ...preset),
+      // without using bind: it returns a new function that calls fn with this = thisArg
+      // and the preset arguments in front of the new ones.
+      function myBind(fn, thisArg, ...preset) {
+        return fn;
+      }
+
+      const user = { name: 'Ada' };
+      function greet(greeting, punctuation) {
+        return `${greeting}, ${this.name}${punctuation}`;
+      }
+      const hello = myBind(greet, user, 'Hello');
+      console.log(hello('!'));
+    </script>
+    <script type="text/plain" class="tests">
+      function getX() { return this.x; }
+      test('fixes this', () => assert.equal(myBind(getX, { x: 1 })(), 1));
+      test('keeps this when called as another object\'s method', () => {
+        const other = { x: 2, getX: myBind(getX, { x: 1 }) };
+        assert.equal(other.getX(), 1);
+      });
+      test('puts preset arguments first', () => {
+        const add = (a, b, c) => a * 100 + b * 10 + c;
+        assert.equal(myBind(add, null, 1, 2)(3), 123);
+      });
+      test('returns a new function and leaves fn alone', () => {
+        const bound = myBind(getX, { x: 1 });
+        assert.ok(bound !== getX);
+        assert.throws(() => getX());
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 10-1 · Start: Fix the Lost this</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 10-1">
+    <script type="text/plain" class="code">
+      // tally.addAll(values) should add every value to tally.total and return the total.
+      // Right now it throws. Fix addAll without changing how it is called.
+      const tally = {
+        total: 0,
+        addAll(values) {
+          values.forEach(function (value) {
+            this.total += value;
+          });
+          return this.total;
+        },
+      };
+
+      console.log(tally.addAll([1, 2, 3]));
+    </script>
+    <script type="text/plain" class="tests">
+      test('adds every value', () => {
+        tally.total = 0;
+        assert.equal(tally.addAll([1, 2, 3]), 6);
+      });
+      test('keeps adding on later calls', () => {
+        tally.total = 0;
+        tally.addAll([1]);
+        assert.equal(tally.addAll([10, 20]), 31);
+      });
+      test('works on other objects that borrow the method', () => {
+        const copy = { total: 100, addAll: tally.addAll };
+        copy.addAll([5]);
+        assert.equal(copy.total, 105);
+      });
+    </script>
+  </div>
+</body>
+</html>

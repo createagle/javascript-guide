@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>10-2 bind and Arrow Functions</title>
+  <style>
+    .intro { margin: 0; max-width: 720px; text-align: center; }
+    .cards { display: grid; gap: 16px; width: min(940px, 100%); }
+    .card { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; align-items: start; }
+    @media (width < 680px) { .card { grid-template-columns: minmax(0, 1fr); } }
+    .card h2 { margin: 0; font-size: 15px; }
+    .card pre.code { font-size: 12px; line-height: 1.45; white-space: pre; word-break: normal; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .out { margin: 10px 0 0; font: 600 14px var(--mono); overflow-wrap: anywhere; }
+    .card .note { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <p class="intro">Four ways to hand a method to <code>addEventListener</code>. Click <b>+1</b> on each card, then try <b>Remove listener</b> and click <b>+1</b> again.</p>
+  <div class="cards" id="cards"></div>
+  <script>
+    'use strict';
+    // Each card shows the real source of its class: Class.toString() returns the code exactly as written here.
+    class PassMethod {
+      count = 0;
+      constructor(button, show) {
+        this.button = button;
+        this.show = show;
+        button.addEventListener('click', this.increment);
+      }
+      increment() {
+        this.count++;
+        this.show(this.count);
+      }
+      detach() {
+        this.button.removeEventListener('click', this.increment);
+      }
+    }
+
+    class BindInPlace {
+      count = 0;
+      constructor(button, show) {
+        this.button = button;
+        this.show = show;
+        button.addEventListener('click', this.increment.bind(this));
+      }
+      increment() {
+        this.count++;
+        this.show(this.count);
+      }
+      detach() {
+        // bind returns a new function: not the one that was added
+        this.button.removeEventListener('click', this.increment.bind(this));
+      }
+    }
+
+    class ArrowWrapper {
+      count = 0;
+      constructor(button, show) {
+        this.button = button;
+        this.show = show;
+        button.addEventListener('click', () => this.increment());
+      }
+      increment() {
+        this.count++;
+        this.show(this.count);
+      }
+      detach() {
+        // another new arrow: not the one that was added
+        this.button.removeEventListener('click', () => this.increment());
+      }
+    }
+
+    class ArrowField {
+      count = 0;
+      constructor(button, show) {
+        this.button = button;
+        this.show = show;
+        button.addEventListener('click', this.increment);
+      }
+      // one arrow per instance, created with the object
+      increment = () => {
+        this.count++;
+        this.show(this.count);
+      };
+      detach() {
+        this.button.removeEventListener('click', this.increment);
+      }
+    }
+
+    const CARDS = [
+      [PassMethod, 'Pass the method', 'this is the button, not the object: the click throws.'],
+      [BindInPlace, 'bind(this)', 'Counts, but removeEventListener gets a different function, so it keeps counting.'],
+      [ArrowWrapper, 'Arrow wrapper', 'Counts, and has the same removal problem as bind.'],
+      [ArrowField, 'Arrow class field', 'Counts, and removal works: this.increment is the same function every time.'],
+    ];
+
+    // toString() keeps the indentation the class had in this file: remove it from every line after the first
+    function dedent(source) {
+      const [first, ...rest] = source.split('\n');
+      const indent = Math.min(...rest.filter((line) => line.trim()).map((line) => line.match(/^ */)[0].length));
+      return [first, ...rest.map((line) => line.slice(indent))].join('\n');
+    }
+
+    let activeOutput = null;
+    // Errors thrown inside a listener are shown on the card that was clicked
+    window.addEventListener('error', (event) => {
+      if (!activeOutput) return;
+      event.preventDefault();
+      activeOutput.className = 'out bad';
+      activeOutput.textContent = `${event.error.name}: ${event.error.message}`;
+    });
+
+    for (const [Cls, title, note] of CARDS) {
+      const card = document.createElement('section');
+      card.className = 'panel card';
+      card.innerHTML = `<pre class="code"></pre><div class="side"><h2></h2><p class="note"></p><div class="row"><button class="btn btn-primary plus" type="button">+1</button><button class="btn remove" type="button">Remove listener</button></div><p class="out" aria-live="polite">Not clicked yet</p></div>`;
+      card.querySelector('h2').textContent = title;
+      card.querySelector('pre').textContent = dedent(Cls.toString());
+      card.querySelector('.note').textContent = note;
+      const output = card.querySelector('.out');
+      const plus = card.querySelector('.plus');
+      plus.addEventListener('pointerdown', () => { activeOutput = output; });
+      plus.addEventListener('keydown', () => { activeOutput = output; });
+      const instance = new Cls(plus, (n) => {
+        output.className = 'out good';
+        output.textContent = `count = ${n}`;
+      });
+      card.querySelector('.remove').addEventListener('click', (event) => {
+        instance.detach();
+        event.target.disabled = true;
+        event.target.textContent = 'removeEventListener called';
+        output.className = 'out';
+        output.textContent = 'Removed? Click +1 to check.';
+      });
+      document.getElementById('cards').append(card);
+    }
+  </script>
+</body>
+</html>
