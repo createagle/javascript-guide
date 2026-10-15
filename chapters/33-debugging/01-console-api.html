@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>33-1 The Console API</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="The console API">
+    <script type="text/plain" class="code" data-name="Levels and formatting">
+      // Four levels: DevTools can filter by them
+      console.log('log: everyday output');
+      console.info('info: something worth knowing');
+      console.warn('warn: something looks wrong');
+      console.error('error: something failed');
+
+      // Substitutions: %s string, %d integer, %f number, %o object
+      console.log('%s has %d items costing %f', 'The cart', 3, 9.5);
+      console.log('Objects are shown with their contents:', { id: 7, tags: ['new', 'sale'] });
+
+      // In DevTools, %c applies CSS to the text after it (this runner ignores it)
+      console.log('%cBig and blue', 'font-size: 20px; color: royalblue');
+    </script>
+    <script type="text/plain" class="code" data-name="console.table">
+      const users = [
+        { name: 'Ada', language: 'Analytical Engine', year: 1843 },
+        { name: 'Grace', language: 'COBOL', year: 1959 },
+        { name: 'Brendan', language: 'JavaScript', year: 1995 },
+      ];
+      console.table(users);
+
+      // Only some columns
+      console.table(users, ['name', 'year']);
+
+      // A plain object works too: its keys become the index column
+      console.table({ Ada: 36, Grace: 85 });
+    </script>
+    <script type="text/plain" class="code" data-name="Groups">
+      console.group('Loading the page');
+      console.log('Reading settings');
+      console.group('Fetching data');
+      console.log('GET /api/user');
+      console.log('GET /api/cart');
+      console.groupEnd();
+      console.log('Rendering');
+      console.groupEnd();
+
+      // groupCollapsed starts closed in DevTools
+      console.groupCollapsed('Details (collapsed in DevTools)');
+      console.log('Hidden until you open the group');
+      console.groupEnd();
+    </script>
+    <script type="text/plain" class="code" data-name="Counting and timing">
+      // console.count: how many times has this line run?
+      for (const word of ['apple', 'pear', 'apple', 'fig', 'apple']) {
+        console.count(word);
+      }
+
+      // console.time / timeLog / timeEnd: how long did it take?
+      console.time('build a string');
+      let text = '';
+      for (let i = 0; i < 100_000; i++) text += 'x';
+      console.timeLog('build a string');           // still running
+      const joined = Array(100_000).fill('x').join('');
+      console.timeEnd('build a string');           // stops the timer
+    </script>
+    <script type="text/plain" class="code" data-name="assert, dir and trace">
+      // assert only prints when the condition is false
+      const stock = 3;
+      console.assert(stock >= 0, 'stock is never negative');   // nothing
+      console.assert(stock > 10, 'stock is low:', stock);       // prints
+
+      // dir shows an object's properties, not its "pretty" form
+      console.dir(new Date(0));
+
+      // trace prints the call stack (DevTools shows every function and line)
+      function checkout() { pay(); }
+      function pay() { console.trace('who called pay()?'); }
+      checkout();
+    </script>
+    <script type="text/plain" class="code" data-name="Logged objects are live">
+      // In DevTools, an object you expand shows its CURRENT contents, not the contents at log time
+      const cart = { items: [] };
+      console.log('cart right now:', cart);
+      cart.items.push('pen');
+
+      // To log a snapshot, copy it first
+      console.log('a copy:', structuredClone(cart));
+      console.log('as JSON:', JSON.stringify(cart));
+      // This runner always prints a snapshot. Open DevTools (F12) and run this in the console to compare.
+    </script>
+  </div>
+</body>
+</html>

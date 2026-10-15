@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 33-3 · Final: A Logpoint in Code</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 33-3">
+    <script type="text/plain" class="code">
+      // traceCalls(object, names) wraps the methods `names` of `object` so that every call is logged,
+      // like a logpoint in DevTools, or monitor(fn) in the Chrome console. Arguments and results use JSON.stringify:
+      //   add(2, 3) → 5
+      //   div(1, 0) threw RangeError: Division by zero      (and the error is thrown again)
+      // The wrapped methods keep `this` and return what the original returns.
+      // traceCalls returns a function that removes the wrapping.
+      function traceCalls(object, names) {
+        const originals = new Map();
+        for (const name of names) {
+          const original = object[name];
+          originals.set(name, original);
+          // A normal function, so `this` is whatever the method is called on
+          object[name] = function (...args) {
+            const call = `${name}(${args.map((arg) => JSON.stringify(arg)).join(', ')})`;
+            try {
+              const result = original.apply(this, args);
+              console.log(`${call} → ${JSON.stringify(result)}`);
+              return result;
+            } catch (error) {
+              console.log(`${call} threw ${error.name}: ${error.message}`);
+              throw error;                 // tracing must not change what the program does
+            }
+          };
+        }
+        return () => {
+          for (const [name, original] of originals) object[name] = original;
+        };
+      }
+
+      class Account {
+        constructor(balance) { this.balance = balance; }
+        deposit(amount) { this.balance += amount; return this.balance; }
+        withdraw(amount) {
+          if (amount > this.balance) throw new RangeError('Not enough money');
+          this.balance -= amount;
+          return this.balance;
+        }
+      }
+      const account = new Account(100);
+      const stop = traceCalls(account, ['deposit', 'withdraw']);
+      try {
+        account.deposit(50);
+        account.withdraw(500);
+      } catch (error) {
+        console.log('caught:', error.message);
+      }
+      stop?.();             // removes the tracing (once traceCalls returns a function)
+    </script>
+    <script type="text/plain" class="tests">
+      const last = () => consoleOutput.at(-1)?.text;
+
+      test('logs the call with its arguments and result', () => {
+        const calc = { add: (a, b) => a + b };
+        traceCalls(calc, ['add']);
+        assert.equal(calc.add(2, 3), 5);
+        assert.equal(last(), 'add(2, 3) → 5');
+      });
+      test('keeps this', () => {
+        const counter = { n: 0, inc(by) { this.n += by; return this.n; } };
+        traceCalls(counter, ['inc']);
+        assert.equal(counter.inc(2), 2);
+        assert.equal(counter.n, 2);
+        assert.equal(last(), 'inc(2) → 2');
+      });
+      test('shows strings and objects as JSON', () => {
+        const greeter = { greet(person) { return `Hi ${person.name}`; } };
+        traceCalls(greeter, ['greet']);
+        greeter.greet({ name: 'Ada' });
+        assert.equal(last(), 'greet({"name":"Ada"}) → "Hi Ada"');
+      });
+      test('logs errors and throws them again', () => {
+        const math = { div(a, b) { if (b === 0) throw new RangeError('Division by zero'); return a / b; } };
+        traceCalls(math, ['div']);
+        assert.throws(() => math.div(1, 0), RangeError);
+        assert.equal(last(), 'div(1, 0) threw RangeError: Division by zero');
+      });
+      test('the returned function removes the wrapping', () => {
+        const calc = { add: (a, b) => a + b };
+        const original = calc.add;
+        const undo = traceCalls(calc, ['add']);
+        undo();
+        assert.equal(calc.add, original);
+      });
+    </script>
+  </div>
+</body>
+</html>

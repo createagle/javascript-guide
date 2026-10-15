@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 33-1 · Final: Debug the Leaderboard</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 33-1">
+    <script type="text/plain" class="code">
+      // leaderboard(players) returns a NEW array of { rank, name, score }, highest score first.
+      // - scores arrive as strings (from a CSV file): compare and return them as numbers
+      // - players with the same score share a rank, and the next rank skips: 1, 2, 2, 4
+      // - players with the same score stay in their original order
+      // - the array passed in must not change
+      // Tip: console.table(...) the result to see what is going on.
+      function leaderboard(players) {
+        const sorted = players
+          .map((p) => ({ name: p.name, score: Number(p.score) }))   // a copy, with real numbers
+          .sort((a, b) => b.score - a.score);                          // numeric and consistent: ties keep their order
+        let rank = 0;
+        return sorted.map((p, i) => {
+          if (i === 0 || p.score !== sorted[i - 1].score) rank = i + 1;   // a new score starts a new rank
+          return { rank, ...p };
+        });
+      }
+
+      const players = [
+        { name: 'Ada', score: '95' },
+        { name: 'Grace', score: '100' },
+        { name: 'Alan', score: '95' },
+        { name: 'Edsger', score: '9' },
+        { name: 'Barbara', score: '120' },
+      ];
+      console.table(leaderboard(players));
+    </script>
+    <script type="text/plain" class="tests">
+      const input = () => [
+        { name: 'Ada', score: '95' },
+        { name: 'Grace', score: '100' },
+        { name: 'Alan', score: '95' },
+        { name: 'Edsger', score: '9' },
+        { name: 'Barbara', score: '120' },
+      ];
+
+      test('highest score first, compared as numbers', () => {
+        const board = leaderboard(input());
+        assert.deepEqual(board.map((p) => p.name), ['Barbara', 'Grace', 'Ada', 'Alan', 'Edsger']);
+        assert.deepEqual(board.map((p) => p.score), [120, 100, 95, 95, 9]);
+      });
+      test('ties share a rank, and the next rank skips', () => {
+        assert.deepEqual(leaderboard(input()).map((p) => p.rank), [1, 2, 3, 3, 5]);
+      });
+      test('ties keep their original order', () => {
+        const board = leaderboard([{ name: 'B', score: '5' }, { name: 'A', score: '5' }, { name: 'C', score: '5' }]);
+        assert.deepEqual(board.map((p) => p.name), ['B', 'A', 'C']);
+      });
+      test('the array passed in does not change', () => {
+        const players = input();
+        leaderboard(players);
+        assert.deepEqual(players, input());
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -6,6 +6,8 @@
 //
 // For each page: no uncaught errors or console errors (except on exercise starter pages), every code runner finishes,
 // and on exercise "final" pages every test passes. Set SHOTS=dir to save light and dark screenshots.
+// A page that is broken on purpose (a debugging exercise) opts out of the error check with
+// <meta name="check-pages" content="errors-expected">.
 import { readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createRequire } from 'node:module';
@@ -46,6 +48,7 @@ for (const path of pages) {
       page.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
     }
     await page.goto(BASE + path);
+    const errorsExpected = await page.locator('meta[name="check-pages"][content~="errors-expected"]').count();
     // Wait until every code runner reports done (or give up after 8 s)
     const runners = await page.locator('.playground').count();
     if (runners) {
@@ -67,6 +70,9 @@ for (const path of pages) {
         const m = s.match(/(\d+) \/ (\d+)/);
         if (m && m[1] !== m[2]) problems.push('tests failing: ' + s);
       }
+    }
+    if (errorsExpected) {
+      for (let i = problems.length - 1; i >= 0; i--) if (/^(uncaught|console): /.test(problems[i])) problems.splice(i, 1);
     }
     if (SHOTS) await page.screenshot({ path: join(SHOTS, path.replace(/[/\\]/g, '__').replace(/\.html$/, `.${scheme}.png`)), fullPage: true });
     await page.close();

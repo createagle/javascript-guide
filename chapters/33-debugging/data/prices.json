@@ -1,0 +1,9 @@
+{
+  "checked": "2025-06-01T09:00:00Z",
+  "prices": {
+    "mug": 9.9,
+    "sticker": 0.1,
+    "notebook": 4.2,
+    "pen": 1.5
+  }
+}

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>33-2 A Cart with Bugs</title>
+  <style>
+    .cart { width: min(560px, 100%); display: grid; gap: 12px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .qty { font-variant-numeric: tabular-nums; }
+    td .btn { padding: 2px 9px; }
+    .coupon { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; }
+    .coupon label { display: flex; gap: 8px; align-items: center; }
+    .coupon input { font: inherit; width: 8em; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+    .total { margin: 0; font-size: 18px; font-weight: 600; }
+    .total output { font-variant-numeric: tabular-nums; }
+    .status { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  </style>
+  <meta name="check-pages" content="errors-expected">
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control"><input type="checkbox" id="fixed"> Use the fixed code</label>
+    <button class="btn" type="button" id="restore">Put everything back</button>
+  </div>
+  <div class="panel cart">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Item</th><th scope="col">Price</th><th scope="col">Quantity</th><th scope="col"><span class="sr-only">Remove</span></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <form class="coupon" id="coupon">
+      <label>Coupon <input id="code" value="SAVE10" autocomplete="off"></label>
+      <button class="btn">Apply</button>
+    </form>
+    <p class="total">Total <output id="total"></output></p>
+    <p class="status" id="status" role="status"></p>
+    <p class="status" id="prices"></p>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const START = [
+      { id: 'mug', name: 'Mug', price: 9.9, qty: 1 },
+      { id: 'sticker', name: 'Sticker', price: 0.1, qty: 3 },
+      { id: 'notebook', name: 'Notebook', price: 4.2, qty: 2 },
+      { id: 'pen', name: 'Pen', price: 1.5, qty: 1 },
+    ];
+
+    // ---- The buggy version ----
+    const buggy = {
+      changeQty(cart, button) {
+        const item = cart.find((i) => i.id === button.dataset.id);
+        item.qty = item.qty + button.dataset.step;
+        if (item.qty < 1) item.qty = 1;
+      },
+      remove(cart, button) {
+        cart.splice(button.dataset.index, 1);
+      },
+      total(cart, discount) {
+        return cart.reduce((sum, i) => sum + i.price * i.qty, 0) * (1 - discount);
+      },
+      money(amount) {
+        return `$${amount}`;
+      },
+      listen(form, handler, signal) {
+        form.addEventListener('submit', handler, { signal });
+      },
+      async loadPrices() {
+        try {
+          const response = await fetch('data/price.json');
+          const data = await response.json();
+          return data;
+        } catch {
+          return null;
+        }
+      },
+    };
+
+    // ---- The fixed version: same names, each bug fixed ----
+    const bound = new WeakSet();
+    const fixed = {
+      changeQty(cart, button) {
+        const item = cart.find((i) => i.id === button.dataset.id);
+        item.qty = Math.max(1, item.qty + Number(button.dataset.step));   // data-* values are strings
+      },
+      remove(cart, button) {
+        const index = cart.findIndex((i) => i.id === button.dataset.id);  // the row order is not the array order
+        if (index !== -1) cart.splice(index, 1);
+      },
+      total(cart, discount) {
+        const cents = cart.reduce((sum, i) => sum + Math.round(i.price * 100) * i.qty, 0);   // whole cents
+        return Math.round(cents * (1 - discount)) / 100;
+      },
+      money(amount) {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+      },
+      listen(form, handler, signal) {
+        if (bound.has(form)) return;                                      // render() runs many times: add it once
+        bound.add(form);
+        form.addEventListener('submit', handler, { signal });
+        signal.addEventListener('abort', () => bound.delete(form));
+      },
+      async loadPrices() {
+        const response = await fetch('data/prices.json');
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText} for ${response.url}`);
+        return response.json();
+      },
+    };
+
+    // ---- The page: the same for both versions ----
+    let code, cart, discount, couponUsed, session;
+
+    function render() {
+      const rows = [...cart].sort((a, b) => a.name.localeCompare(b.name));    // shown in A–Z order
+      $('rows').replaceChildren(...rows.map((item, index) => {
+        const tr = document.createElement('tr');
+        const qty = document.createElement('td');
+        qty.className = 'qty';
+        const button = (text, label, data) => {
+          const b = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: text });
+          b.setAttribute('aria-label', `${label} ${item.name}`);
+          Object.assign(b.dataset, { id: item.id, index }, data);
+          return b;
+        };
+        qty.append(button('−', 'One less', { step: -1 }), ` ${item.qty} `, button('+', 'One more', { step: 1 }));
+        const remove = document.createElement('td');
+        remove.append(button('×', 'Remove', {}));
+        tr.append(Object.assign(document.createElement('th'), { scope: 'row', textContent: item.name }),
+          Object.assign(document.createElement('td'), { textContent: code.money(item.price) }), qty, remove);
+        return tr;
+      }));
+      $('total').value = cart.length ? code.money(code.total(cart, discount)) + (discount ? ` (after ${discount * 100}% off)` : '') : '—';
+      code.listen($('coupon'), (event) => applyCoupon(event), session.signal);
+    }
+
+    function applyCoupon(event) {
+      event.preventDefault();
+      if ($('code').value.trim().toUpperCase() !== 'SAVE10') {
+        $('status').textContent = 'Unknown coupon.';
+      } else if (couponUsed) {
+        $('status').textContent = 'SAVE10 has already been applied.';
+      } else {
+        couponUsed = true;
+        discount = 0.1;
+        $('status').textContent = 'SAVE10 applied: 10% off.';
+        render();
+      }
+    }
+
+    async function start() {
+      session?.abort();
+      session = new AbortController();
+      code = $('fixed').checked ? fixed : buggy;
+      cart = structuredClone(START);
+      discount = 0;
+      couponUsed = false;
+      $('status').textContent = '';
+      $('rows').addEventListener('click', (event) => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (button.dataset.step) code.changeQty(cart, button);
+        else code.remove(cart, button);
+        render();
+      }, { signal: session.signal });
+      render();
+      try {
+        const data = await code.loadPrices();
+        $('prices').textContent = data ? `Prices checked ${new Date(data.checked).toLocaleDateString('en')}.` : 'Prices checked: never.';
+      } catch (error) {
+        $('prices').textContent = `Could not check prices: ${error.message}`;
+      }
+    }
+    $('fixed').addEventListener('change', start);
+    $('restore').addEventListener('click', start);
+    start();
+  </script>
+</body>
+</html>

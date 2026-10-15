@@ -10,6 +10,7 @@
 1. 改完代码后先本地验证：`python3 -m http.server 8000` 起服务，运行 `node tools/check_pages.mjs`（可传入页面路径），
    它用 Playwright（Chromium 已预装）打开页面，检查没有报错、代码运行器都跑完、练习成品的测试全部通过。
    `SHOTS=<目录>` 会保存亮色、暗色截图，新页面要看一遍截图，交互控件实际操作一次。
+   故意出错的演示页（调试章节）在 `<head>` 里加 `<meta name="check-pages" content="errors-expected">`，跳过报错检查。
 2. 提交并推送到当前会话指定的 `claude/**` 分支：`git push -u origin <分支>`。
 3. 推送会触发 `.github/workflows/sync-main.yml`：把分支快进合并到 `main`（没有 `main` 时直接创建），
    再触发 `pages.yml` 部署。不需要手动开 PR 或合并。

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 33-2 · Start: Debug the Async Loader</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 33-2">
+    <script type="text/plain" class="code">
+      // loadProfiles(ids, fetchProfile) starts all the requests at once and resolves to the profiles,
+      // in the same order as ids. If any request fails, the returned promise rejects with that error.
+      // fetchProfile(id) returns a promise; this one is a fake with random delays.
+      const fetchProfile = (id) => new Promise((resolve, reject) => {
+        setTimeout(() => (id < 0 ? reject(new Error(`No profile ${id}`)) : resolve({ id, name: `User ${id}` })), 10 + Math.random() * 40);
+      });
+
+      async function loadProfiles(ids, fetchProfile) {
+        const profiles = [];
+        ids.forEach(async (id) => {
+          try {
+            profiles.push(await fetchProfile(id));
+          } catch (error) {
+            console.log(error);
+          }
+        });
+        return profiles;
+      }
+
+      const profiles = await loadProfiles([3, 1, 2], fetchProfile);
+      console.log(profiles);
+    </script>
+    <script type="text/plain" class="tests">
+      test('resolves only when every profile has arrived', async () => {
+        const result = await loadProfiles([1, 2, 3], fetchProfile);
+        assert.equal(result.length, 3);
+      });
+      test('keeps the order of ids', async () => {
+        const slowFirst = (id) => new Promise((resolve) => setTimeout(() => resolve({ id }), id === 1 ? 60 : 5));
+        const result = await loadProfiles([1, 2, 3], slowFirst);
+        assert.deepEqual(result.map((p) => p.id), [1, 2, 3]);
+      });
+      test('runs the requests at the same time', async () => {
+        const fixed = (id) => new Promise((resolve) => setTimeout(() => resolve({ id }), 50));
+        const started = performance.now();
+        await loadProfiles([1, 2, 3, 4], fixed);
+        const took = performance.now() - started;
+        assert.ok(took >= 45 && took < 150, `took ${Math.round(took)} ms`);
+      });
+      test('rejects when a request fails', async () => {
+        await assert.rejects(loadProfiles([1, -1, 2], fetchProfile), /No profile -1/);
+      });
+    </script>
+  </div>
+</body>
+</html>
