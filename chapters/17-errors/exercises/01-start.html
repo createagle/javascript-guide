@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 17-1 · Start: Catch Only What You Expect</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 17-1">
+    <script type="text/plain" class="code">
+      // safeParse(text, fallback, reviver) parses JSON and returns fallback when the text is not valid JSON.
+      // Any other error (for example one thrown by the reviver) is a bug and must not be hidden.
+      function safeParse(text, fallback, reviver) {
+        try {
+          return JSON.parse(text, reviver);
+        } catch {
+          return fallback;
+        }
+      }
+
+      console.log(safeParse('{"a":1}', null), safeParse('{oops', null));
+    </script>
+    <script type="text/plain" class="tests">
+      test('parses valid JSON', () => assert.deepEqual(safeParse('{"a":1}', null), { a: 1 }));
+      test('returns the fallback for invalid JSON', () => assert.deepEqual(safeParse('{oops', []), []));
+      test('fallback is undefined when not given', () => assert.equal(safeParse('nope'), undefined));
+      test('errors from the reviver are not hidden', () => {
+        const reviver = (key, value) => {
+          if (key === 'age' && typeof value !== 'number') throw new TypeError('age must be a number');
+          return value;
+        };
+        assert.throws(() => safeParse('{"age":"ten"}', null, reviver), TypeError);
+      });
+    </script>
+  </div>
+</body>
+</html>

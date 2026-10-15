@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>17-1 Error Gallery</title>
+  <style>
+    .stage { width: min(980px, 100%); }
+    .picker { flex: 1 1 300px; }
+    .detail { flex: 1 1 420px; }
+    .triggers { display: flex; flex-wrap: wrap; gap: 6px; }
+    .triggers .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    .global-label { margin-top: 16px; }
+    .log { margin: 10px 0 0; padding-left: 0; list-style: none; font: 12px/1.6 var(--mono); color: var(--bad); }
+    .log li { border-top: 1px solid var(--border); padding: 3px 0; overflow-wrap: anywhere; }
+    .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 12px 0; font-size: 13px; }
+    .facts dt { font-family: var(--mono); color: var(--muted); white-space: pre; }
+    .facts dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+    .stack { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body class="demo">
+  <div class="stage">
+    <div class="panel picker">
+      <p class="label">Cause an error</p>
+      <div class="triggers" id="triggers"></div>
+      <p class="label global-label">Errors nobody catches</p>
+      <div class="triggers" id="global"></div>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </div>
+    <div class="panel detail">
+      <p class="label">Code</p>
+      <pre class="code" id="code"></pre>
+      <dl class="facts" id="facts"></dl>
+      <p class="label">Stack (first lines)</p>
+      <pre class="code stack" id="stack"></pre>
+    </div>
+  </div>
+  <script type="module">
+    class ValidationError extends Error {
+      constructor(message, options) {
+        super(message, options);
+        this.name = 'ValidationError';
+      }
+    }
+
+    const CASES = [
+      ['TypeError', 'const user = null;\nuser.name;', () => { const user = null; return user.name; }],
+      ['ReferenceError', 'total + 1;  // total was never declared', () => total + 1],
+      ['SyntaxError', "JSON.parse('{bad json}');", () => JSON.parse('{bad json}')],
+      ['RangeError', 'new Array(-1);', () => new Array(-1)],
+      ['URIError', "decodeURIComponent('%');", () => decodeURIComponent('%')],
+      ['DOMException', "document.querySelector('!!');", () => document.querySelector('!!')],
+      ['AbortError', 'const controller = new AbortController();\ncontroller.abort();\ncontroller.signal.throwIfAborted();', () => { const controller = new AbortController(); controller.abort(); controller.signal.throwIfAborted(); }],
+      ['AggregateError', "await Promise.any([\n  Promise.reject(new Error('mirror 1 down')),\n  Promise.reject(new Error('mirror 2 down')),\n]);",
+        () => Promise.any([Promise.reject(new Error('mirror 1 down')), Promise.reject(new Error('mirror 2 down'))])],
+      ['Custom error with cause', "try {\n  JSON.parse('{oops');\n} catch (error) {\n  throw new ValidationError('Settings are broken', { cause: error });\n}",
+        () => { try { JSON.parse('{oops'); } catch (error) { throw new ValidationError('Settings are broken', { cause: error }); } }],
+      ['Throwing a string', "throw 'Something went wrong';", () => { throw 'Something went wrong'; }],
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    function fact(dl, k, v) {
+      dl.append(Object.assign(document.createElement('dt'), { textContent: k }), Object.assign(document.createElement('dd'), { textContent: v }));
+    }
+    function describe(error) {
+      const dl = $('facts');
+      dl.replaceChildren();
+      const isObject = error !== null && typeof error === 'object';
+      fact(dl, 'error.name', isObject ? error.name : '(a string has no name)');
+      fact(dl, 'error.message', isObject ? error.message : '(a string has no message)');
+      fact(dl, 'error.constructor', isObject ? error.constructor.name : typeof error);
+      fact(dl, 'instanceof Error', String(error instanceof Error));
+      if (typeof Error.isError === 'function') fact(dl, 'Error.isError(error)', String(Error.isError(error)));
+      if (error instanceof AggregateError) fact(dl, 'error.errors', error.errors.map((e) => e.message).join(' · '));
+      let cause = isObject ? error.cause : undefined;
+      let depth = 1;
+      while (cause) {
+        fact(dl, 'error' + '.cause'.repeat(depth), `${cause.name}: ${cause.message}`);
+        cause = cause.cause;
+        depth++;
+      }
+      $('stack').textContent = isObject && error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : '(no stack: only Error objects record where they were created)';
+    }
+
+    async function show(index) {
+      const [, code, run] = CASES[index];
+      [...$('triggers').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === index)));
+      $('code').textContent = code;
+      try {
+        await run();
+        describe(new Error('(no error was thrown)'));
+      } catch (error) {
+        describe(error);
+      }
+    }
+    CASES.forEach(([label], i) => {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: label });
+      button.addEventListener('click', () => show(i));
+      $('triggers').append(button);
+    });
+
+    // Global handlers: the last line of defence for errors no code caught
+    function log(text) {
+      $('log').prepend(Object.assign(document.createElement('li'), { textContent: text }));
+    }
+    window.addEventListener('error', (event) => {
+      if (!event.error?.fromDemo) return;
+      event.preventDefault();   // keep the console clean: this one is expected
+      log(`window "error": ${event.error.message}`);
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      if (!event.reason?.fromDemo) return;
+      event.preventDefault();
+      log(`window "unhandledrejection": ${event.reason.message}`);
+    });
+    const demoError = (message) => Object.assign(new Error(message), { fromDemo: true });
+    const GLOBAL = [
+      ['Throw inside setTimeout', () => setTimeout(() => { throw demoError('thrown in a timer callback'); })],
+      ['Reject a promise, no catch', () => { Promise.reject(demoError('rejected and never handled')); }],
+    ];
+    for (const [label, run] of GLOBAL) {
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: label });
+      button.addEventListener('click', run);
+      $('global').append(button);
+    }
+    show(0);
+  </script>
+</body>
+</html>

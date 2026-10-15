@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 17-2 · Start: An HttpError Class</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 17-2">
+    <script type="text/plain" class="code">
+      // HttpError: new HttpError(status, url, options)
+      //   name 'HttpError', status, url,
+      //   message `Request to ${url} failed with status ${status}`,
+      //   and options.cause passed on to Error.
+      // readJSON(response, url): response is { ok, status, body }.
+      //   Not ok → throw an HttpError. A body that is not JSON → throw an HttpError whose cause is the SyntaxError.
+      class HttpError {}
+
+      function readJSON(response, url) {
+        if (!response.ok) throw 'Request failed';
+        return JSON.parse(response.body);
+      }
+
+      try {
+        readJSON({ ok: false, status: 404, body: '' }, '/api/user');
+      } catch (error) {
+        console.log(error.name, error.message);
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      const notFound = () => readJSON({ ok: false, status: 404, body: '' }, '/api/user');
+      test('returns the data when all is well', () => assert.deepEqual(readJSON({ ok: true, status: 200, body: '{"id":7}' }, '/x'), { id: 7 }));
+      test('a failed request throws an HttpError', () => {
+        const error = assert.throws(notFound, HttpError);
+        assert.ok(error instanceof Error);
+        assert.equal(error.name, 'HttpError');
+        assert.equal(error.status, 404);
+        assert.equal(error.url, '/api/user');
+      });
+      test('the message names the URL and status', () => assert.equal(assert.throws(notFound).message, 'Request to /api/user failed with status 404'));
+      test('a broken body keeps the SyntaxError as its cause', () => {
+        const error = assert.throws(() => readJSON({ ok: true, status: 200, body: '<html>' }, '/x'), HttpError);
+        assert.ok(error.cause instanceof SyntaxError);
+      });
+      test('it has a stack trace', () => assert.equal(typeof assert.throws(notFound).stack, 'string'));
+    </script>
+  </div>
+</body>
+</html>

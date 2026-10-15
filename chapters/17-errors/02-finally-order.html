@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>17-2 The Order of try, catch and finally</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="try, catch, finally">
+    <script type="text/plain" class="code" data-name="The normal order">
+      function run(fail) {
+        try {
+          console.log('try: start');
+          if (fail) throw new Error('boom');
+          console.log('try: end');
+        } catch (error) {
+          console.log('catch:', error.message);
+        } finally {
+          console.log('finally: always runs');
+        }
+        console.log('after the statement');
+      }
+
+      run(false);
+      console.log('---');
+      run(true);
+    </script>
+    <script type="text/plain" class="code" data-name="return inside try">
+      function read() {
+        try {
+          console.log('try: about to return');
+          return 'value from try';
+        } finally {
+          // Runs after the return value is decided, before the function actually returns
+          console.log('finally: still runs');
+        }
+      }
+
+      console.log('result:', read());
+    </script>
+    <script type="text/plain" class="code" data-name="finally overrides">
+      function overrideReturn() {
+        try {
+          return 'from try';
+        } finally {
+          return 'from finally';       // replaces the try's return value
+        }
+      }
+
+      function swallow() {
+        try {
+          throw new Error('this error disappears');
+        } finally {
+          return 'from finally';       // the error is silently dropped
+        }
+      }
+
+      console.log(overrideReturn());
+      console.log(swallow());
+    </script>
+    <script type="text/plain" class="code" data-name="try / finally without catch">
+      function saveDocument() {
+        console.log('lock the document');
+        try {
+          throw new Error('disk is full');
+        } finally {
+          console.log('unlock the document');   // clean-up runs, the error keeps going
+        }
+      }
+
+      try {
+        saveDocument();
+      } catch (error) {
+        console.log('the caller sees:', error.message);
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="await inside try">
+      function request(ok) {
+        return new Promise((resolve, reject) => {
+          setTimeout(() => (ok ? resolve('data') : reject(new Error('network down'))), 100);
+        });
+      }
+
+      async function load(ok) {
+        console.log('show the spinner');
+        try {
+          const value = await request(ok);
+          console.log('got', value);
+        } catch (error) {
+          console.log('caught:', error.message);
+        } finally {
+          console.log('hide the spinner');
+        }
+      }
+
+      await load(true);
+      console.log('---');
+      await load(false);
+    </script>
+    <script type="text/plain" class="code" data-name="Errors with a cause">
+      function parseSettings(text) {
+        try {
+          return JSON.parse(text);
+        } catch (error) {
+          throw new Error('The settings file is broken', { cause: error });
+        }
+      }
+
+      try {
+        parseSettings('{ "theme": dark }');
+      } catch (error) {
+        console.log(error.message);
+        console.log('cause:', error.cause.name, '-', error.cause.message);
+      }
+    </script>
+    <script type="text/plain" class="code" data-name="using: automatic clean-up">
+      // Needs explicit resource management (Chrome 134, Firefox 141).
+      // In other browsers this example stops with a SyntaxError.
+      function open(name) {
+        console.log('open', name);
+        return {
+          name,
+          [Symbol.dispose]() {
+            console.log('close', name);
+          },
+        };
+      }
+
+      function work() {
+        using first = open('a.txt');
+        using second = open('b.txt');
+        console.log('working with', first.name, 'and', second.name);
+        throw new Error('something failed');
+      }
+
+      try {
+        work();
+      } catch (error) {
+        console.log('caught:', error.message);
+      }
+    </script>
+  </div>
+</body>
+</html>

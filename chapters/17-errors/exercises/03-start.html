@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 17-3 · Start: Always Release the Lock</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 17-3">
+    <script type="text/plain" class="code">
+      // lock has acquire() and release(). withLock(lock, task) must acquire the lock,
+      // run task(), release the lock even if task throws,
+      // and return task's result (or let task's error through).
+      function withLock(lock, task) {
+        lock.acquire();
+        const result = task();
+        lock.release();
+        return result;
+      }
+
+      const lock = { held: false, acquire() { this.held = true; }, release() { this.held = false; } };
+      try {
+        withLock(lock, () => { throw new Error('task failed'); });
+      } catch (error) {
+        console.log(error.message, '| lock still held?', lock.held);
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      function makeLock({ failToAcquire = false } = {}) {
+        return {
+          calls: [],
+          acquire() {
+            this.calls.push('acquire');
+            if (failToAcquire) throw new Error('busy');
+          },
+          release() { this.calls.push('release'); },
+        };
+      }
+      test('returns the task result and releases', () => {
+        const l = makeLock();
+        assert.equal(withLock(l, () => 42), 42);
+        assert.deepEqual(l.calls, ['acquire', 'release']);
+      });
+      test('releases when the task throws, and rethrows', () => {
+        const l = makeLock();
+        assert.throws(() => withLock(l, () => { throw new RangeError('bad'); }), RangeError);
+        assert.deepEqual(l.calls, ['acquire', 'release']);
+      });
+      test('does not run the task or release when acquire fails', () => {
+        const l = makeLock({ failToAcquire: true });
+        let ran = false;
+        assert.throws(() => withLock(l, () => { ran = true; }));
+        assert.equal(ran, false);
+        assert.deepEqual(l.calls, ['acquire']);
+      });
+    </script>
+  </div>
+</body>
+</html>
