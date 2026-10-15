@@ -155,9 +155,11 @@
       #render() {
         const { value, max } = this;
         if (this.#stars.children.length !== max) {
-          this.#stars.replaceChildren(...Array.from({ length: max }, (_, i) =>
-            Object.assign(document.createElement('span'), { textContent: '★', ariaHidden: 'true' })));
-          [...this.#stars.children].forEach((star, i) => { star.dataset.value = i + 1; });
+          this.#stars.replaceChildren(...Array.from({ length: max }, (_, i) => {
+            const star = Object.assign(document.createElement('span'), { textContent: '★', ariaHidden: 'true' });
+            star.dataset.value = i + 1;                   // a click on it chooses this value
+            return star;
+          }));
         }
         [...this.#stars.children].forEach((star, i) => star.classList.toggle('on', i < value));
         this.#aria('ariaValueMin', '0');
