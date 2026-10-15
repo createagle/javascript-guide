@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>36-2 Prototype Pollution</title>
+  <style>
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .layout .panel { display: grid; gap: 10px; }
+    .field { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+    textarea { font: 13px/1.5 var(--mono); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 6px 10px 8px; display: grid; gap: 4px; min-width: 0; font-size: 14px; }
+    legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px; }
+    .check { display: flex; align-items: center; gap: 8px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    .results pre { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--surface); font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.5em; }
+    .results .label { margin: 0; }
+    #user { margin: 0; font-size: 14px; font-weight: 600; }
+    .bad { color: var(--bad); }
+    .admin { padding: 10px 12px; border-radius: 8px; border: 2px solid var(--bad); color: var(--bad); font-weight: 700; }
+  </style>
+</head>
+<body class="demo">
+  <div class="layout">
+    <form class="panel" id="form">
+      <label class="field">Settings from the user (JSON)
+        <textarea id="json" rows="4" spellcheck="false"></textarea></label>
+      <label class="field">Try
+        <select class="btn" id="preset">
+          <option value='{"theme": "dark", "editor": {"fontSize": 16}}'>Normal settings</option>
+          <option value='{"__proto__": {"isAdmin": true}}'>__proto__ at the top</option>
+          <option value='{"editor": {"__proto__": {"isAdmin": true}}}'>__proto__ nested</option>
+          <option value='{"constructor": {"prototype": {"isAdmin": true}}}'>constructor.prototype</option>
+        </select></label>
+      <fieldset>
+        <legend>Merge with</legend>
+        <label class="check"><input type="radio" name="merge" value="naive" checked> A naive deep merge</label>
+        <label class="check"><input type="radio" name="merge" value="safe"> A safe deep merge</label>
+      </fieldset>
+      <div class="buttons">
+        <button class="btn btn-primary">Apply settings</button>
+        <button class="btn" type="button" id="clean">Clean Object.prototype</button>
+      </div>
+    </form>
+    <div class="panel results">
+      <p class="label">Settings after the merge</p>
+      <pre id="settings"></pre>
+      <p class="label">Object.prototype's own extra keys</p>
+      <pre id="proto"></pre>
+      <p class="label">A brand-new user object: <code>const user = {}</code></p>
+      <p id="user"></p>
+      <div class="admin" id="admin" hidden>Admin panel: delete every account?</div>
+    </div>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const DEFAULTS = { theme: 'light', editor: { fontSize: 14, wrap: true } };
+    const ORIGINAL_KEYS = new Set(Reflect.ownKeys(Object.prototype));
+
+    // Naive: follows every key, including "__proto__" and "constructor", which lead to Object.prototype
+    function naiveMerge(target, source) {
+      for (const key in source) {
+        if (typeof source[key] === 'object' && source[key] !== null) {
+          if (!(key in target)) target[key] = {};
+          naiveMerge(target[key], source[key]);
+        } else {
+          target[key] = source[key];
+        }
+      }
+      return target;
+    }
+
+    // Safe: only own keys, never the three keys that lead to prototypes
+    const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);
+    function safeMerge(target, source) {
+      for (const key of Object.keys(source)) {
+        if (FORBIDDEN.has(key)) continue;
+        const value = source[key];
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          const existing = Object.hasOwn(target, key) && typeof target[key] === 'object' ? target[key] : {};
+          target[key] = safeMerge(existing, value);
+        } else {
+          target[key] = value;
+        }
+      }
+      return target;
+    }
+
+    function show(settings) {
+      $('settings').textContent = settings ? JSON.stringify(settings, null, 2) : '';
+      const extra = Reflect.ownKeys(Object.prototype).filter((key) => !ORIGINAL_KEYS.has(key)).map(String);
+      $('proto').textContent = extra.length ? extra.join(', ') : '(none)';
+      $('proto').className = extra.length ? 'bad' : '';
+      const user = {};
+      $('user').textContent = `user.isAdmin is ${user.isAdmin}${user.isAdmin ? ', inherited from Object.prototype!' : ''}`;
+      $('user').className = user.isAdmin ? 'bad' : '';
+      $('admin').hidden = !user.isAdmin;
+    }
+
+    $('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      let input;
+      try {
+        input = JSON.parse($('json').value);   // JSON.parse makes "__proto__" an ordinary own key
+      } catch (error) {
+        $('settings').textContent = `Not valid JSON: ${error.message}`;
+        return;
+      }
+      const merge = new FormData($('form')).get('merge') === 'safe' ? safeMerge : naiveMerge;
+      show(merge(structuredClone(DEFAULTS), input));
+    });
+    $('preset').addEventListener('change', () => { $('json').value = $('preset').value; });
+    $('clean').addEventListener('click', () => {
+      for (const key of Reflect.ownKeys(Object.prototype)) if (!ORIGINAL_KEYS.has(key)) delete Object.prototype[key];
+      show(null);
+    });
+    $('json').value = $('preset').value;
+    show(null);
+  </script>
+</body>
+</html>

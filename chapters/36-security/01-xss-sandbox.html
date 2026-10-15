@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>36-1 XSS Sandbox</title>
+  <style>
+    .setup { width: min(900px, 100%); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px 16px; align-items: start; font-size: 14px; }
+    .setup > label { display: grid; gap: 4px; color: var(--muted); }
+    .setup .wide { grid-column: 1 / -1; }
+    textarea { font: 13px/1.5 var(--mono); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 6px 10px 8px; display: grid; gap: 4px; min-width: 0; }
+    legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px; }
+    .check { display: flex; align-items: center; gap: 8px; }
+    .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; width: min(900px, 100%); align-items: start; }
+    .layout .panel { display: grid; gap: 8px; }
+    iframe { width: 100%; height: 110px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .verdict { margin: 0; font-weight: 600; font-size: 14px; }
+    .verdict.good { color: var(--good); }
+    .verdict.bad { color: var(--bad); }
+    .source { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--surface); font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+  <meta name="check-pages" content="errors-expected">
+</head>
+<body class="demo">
+  <form class="panel setup" id="setup">
+    <label class="wide">Untrusted input
+      <textarea id="input" rows="2" spellcheck="false"></textarea></label>
+    <label>Try a payload
+      <select class="btn" id="payload">
+        <option value="Hello! Nice article.">Harmless text</option>
+        <option value="&lt;img src=x onerror=&quot;parent.postMessage('xss', '*')&quot;&gt;">img onerror</option>
+        <option value="&lt;svg onload=&quot;parent.postMessage('xss', '*')&quot;&gt;">svg onload</option>
+        <option value="&lt;script&gt;parent.postMessage('xss', '*')&lt;/script&gt;">script tag</option>
+        <option value="&quot;&gt;&lt;img src=x onerror=&quot;parent.postMessage('xss', '*')&quot;&gt;">break out of an attribute</option>
+        <option value="javascript:parent.postMessage('xss', '*')">javascript: URL</option>
+      </select></label>
+    <label>Put it in
+      <select class="btn" id="context">
+        <option value="text">HTML text: &lt;p&gt;…&lt;/p&gt;</option>
+        <option value="attr">an attribute: value="…"</option>
+        <option value="url">a link: href="…"</option>
+      </select></label>
+    <fieldset>
+      <legend>Defences</legend>
+      <label class="check"><input type="checkbox" id="escape"> Escape for HTML</label>
+      <label class="check"><input type="checkbox" id="checkurl"> Allow only http(s) links</label>
+      <label class="check"><input type="checkbox" id="csp"> Content-Security-Policy: script-src 'none'</label>
+    </fieldset>
+  </form>
+  <div class="layout">
+    <div class="panel">
+      <p class="label">The page that was built (in a sandboxed iframe)</p>
+      <iframe id="frame" sandbox="allow-scripts" title="Rendered page"></iframe>
+      <p class="verdict" id="verdict" role="status"></p>
+    </div>
+    <div class="panel">
+      <p class="label">Its HTML source</p>
+      <pre class="source" id="source"></pre>
+    </div>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    // Escaping turns the five special characters into entities, so text stays text
+    const escapeHTML = (text) => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    // A URL is only safe as a link if its scheme is http or https (no javascript:, data:, …)
+    function safeURL(text) {
+      try {
+        const url = new URL(text, 'https://example.com/');
+        return ['http:', 'https:'].includes(url.protocol) ? text : '#';
+      } catch {
+        return '#';
+      }
+    }
+
+    function buildPage() {
+      let value = $('input').value;
+      if ($('context').value === 'url' && $('checkurl').checked) value = safeURL(value);
+      if ($('escape').checked) value = escapeHTML(value);
+      const body = {
+        text: `<p>${value}</p>`,
+        attr: `<label>Your name <input value="${value}"></label>`,
+        url: `<p><a href="${value}">Visit my website</a></p>`,
+      }[$('context').value];
+      const csp = $('csp').checked ? `<meta http-equiv="Content-Security-Policy" content="script-src 'none'">\n` : '';
+      return `<!doctype html>\n${csp}<style>body { font: 15px system-ui, sans-serif; margin: 12px; color: #1c1917; background: #fff; }</style>\n${body}`;
+    }
+
+    let timer;
+    function render() {
+      const html = buildPage();
+      $('source').textContent = html;
+      $('verdict').textContent = 'Waiting…';
+      $('verdict').className = 'verdict';
+      $('frame').srcdoc = html;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if ($('verdict').className !== 'verdict') return;   // a payload already reported
+        // Browsers do not run javascript: links inside a sandboxed frame, so check the link instead.
+        // DOMParser builds a document without running anything in it.
+        const link = new DOMParser().parseFromString(html, 'text/html').querySelector('a[href]');
+        const runsCode = link?.protocol === 'javascript:';
+        $('verdict').textContent = !runsCode ? 'No script ran.'
+          : $('csp').checked ? 'The link points to javascript:, but the CSP would block it.'
+          : 'Clicking this link would run the code in its URL!';
+        $('verdict').className = `verdict ${runsCode && !$('csp').checked ? 'bad' : 'good'}`;
+      }, 600);
+    }
+
+    // The payloads report back with postMessage. Accept messages from our frame only.
+    window.addEventListener('message', (event) => {
+      if (event.source !== $('frame').contentWindow || event.data !== 'xss') return;
+      $('verdict').textContent = 'A script from the input ran inside the page!';
+      $('verdict').className = 'verdict bad';
+    });
+
+    $('payload').addEventListener('change', () => {
+      $('input').value = $('payload').value;
+      if ($('payload').value.startsWith('javascript:')) $('context').value = 'url';
+      else if ($('payload').value.startsWith('"')) $('context').value = 'attr';
+      else $('context').value = 'text';
+      render();
+    });
+    $('setup').addEventListener('input', (event) => { if (event.target.id !== 'payload') render(); });
+    $('setup').addEventListener('submit', (event) => event.preventDefault());
+    $('payload').selectedIndex = 1;
+    $('input').value = $('payload').value;
+    render();
+  </script>
+</body>
+</html>

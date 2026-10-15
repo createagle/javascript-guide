@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 36-1 · Start: Escape Output by Default</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 36-1">
+    <script type="text/plain" class="code">
+      // Build HTML strings safely:
+      // - escapeHTML(text) replaces & < > " ' with &amp; &lt; &gt; &quot; &#39;
+      // - html`...` is a tagged template: every ${value} is escaped, except values made by html`` themselves
+      //   (so templates can be nested), and arrays are joined (each item handled the same way)
+      // - safeURL(text) returns text if it is an http:, https: or mailto: URL (relative URLs are fine too), else '#'
+      // html`` returns a SafeHTML object whose toString() is the HTML.
+      class SafeHTML {
+        constructor(value) { this.value = value; }
+        toString() { return this.value; }
+      }
+      function escapeHTML(text) {
+        return String(text).replace(/</g, '&lt;');
+      }
+
+      function html(strings, ...values) {
+        return new SafeHTML(strings.reduce((out, string, i) => out + values[i - 1] + string));
+      }
+
+      function safeURL(text) {
+        return text;
+      }
+
+      const comment = { author: '<img src=x onerror=alert(1)>', site: 'javascript:alert(1)', tags: ['a&b', '<i>'] };
+      const view = html`<article>
+        <h3>${comment.author}</h3>
+        <a href="${safeURL(comment.site)}">website</a>
+        <ul>${comment.tags.map((tag) => html`<li>${tag}</li>`)}</ul>
+      </article>`;
+      console.log(String(view));
+    </script>
+    <script type="text/plain" class="tests">
+      test('escapeHTML escapes all five special characters', () => {
+        assert.equal(escapeHTML(`<a href="x" title='y'>&</a>`), '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+      });
+      test('html`` escapes values but not the template itself', () => {
+        const name = '<b>Ada</b>';
+        assert.equal(String(html`<p class="x">${name}</p>`), '<p class="x">&lt;b&gt;Ada&lt;/b&gt;</p>');
+      });
+      test('quotes in values cannot break out of an attribute', () => {
+        const evil = '" onmouseover="alert(1)';
+        assert.equal(String(html`<input value="${evil}">`), '<input value="&quot; onmouseover=&quot;alert(1)">');
+      });
+      test('nested html`` and arrays are not escaped twice', () => {
+        const items = ['a<b', 'c'];
+        assert.equal(String(html`<ul>${items.map((i) => html`<li>${i}</li>`)}</ul>`), '<ul><li>a&lt;b</li><li>c</li></ul>');
+      });
+      test('null and undefined become empty', () => {
+        assert.equal(String(html`<p>${undefined}${null}</p>`), '<p></p>');
+      });
+      test('safeURL allows http(s), mailto and relative URLs only', () => {
+        assert.equal(safeURL('https://example.org/a?b=1'), 'https://example.org/a?b=1');
+        assert.equal(safeURL('mailto:ada@example.com'), 'mailto:ada@example.com');
+        assert.equal(safeURL('/profile/7'), '/profile/7');
+        assert.equal(safeURL('javascript:alert(1)'), '#');
+        assert.equal(safeURL(' JaVaScRiPt:alert(1)'), '#');
+        assert.equal(safeURL('data:text/html,<script>alert(1)<\/script>'), '#');
+      });
+    </script>
+  </div>
+</body>
+</html>

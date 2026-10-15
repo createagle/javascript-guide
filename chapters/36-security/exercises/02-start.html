@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 36-2 · Start: A Merge That Cannot Be Polluted</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 36-2">
+    <script type="text/plain" class="code">
+      // safeMerge(target, source) deep-merges source (for example, JSON from a user) into target and returns target:
+      // - plain objects are merged key by key; arrays and other values replace what is there
+      // - only source's OWN keys are copied, and never "__proto__", "constructor" or "prototype"
+      // - source is not changed
+      function safeMerge(target, source) {
+        for (const key in source) {
+          if (typeof source[key] === 'object' && source[key] !== null) {
+            if (typeof target[key] !== 'object') target[key] = {};
+            safeMerge(target[key], source[key]);
+          } else {
+            target[key] = source[key];
+          }
+        }
+        return target;
+      }
+
+      const settings = safeMerge({ theme: 'light', editor: { fontSize: 14 } }, JSON.parse('{"editor": {"fontSize": 16}, "__proto__": {"isAdmin": true}}'));
+      console.log(settings, 'isAdmin of a new object:', ({}).isAdmin);
+    </script>
+    <script type="text/plain" class="tests">
+      const clean = () => {
+        delete Object.prototype.isAdmin;
+        delete Object.prototype.polluted;
+      };
+
+      test('merges nested objects', () => {
+        const result = safeMerge({ a: 1, nested: { x: 1, y: 2 } }, { b: 2, nested: { y: 3 } });
+        assert.deepEqual(result, { a: 1, b: 2, nested: { x: 1, y: 3 } });
+      });
+      test('arrays replace, they are not merged', () => {
+        assert.deepEqual(safeMerge({ list: [1, 2, 3] }, { list: [9] }), { list: [9] });
+      });
+      test('"__proto__" from JSON does not reach Object.prototype', () => {
+        try {
+          safeMerge({}, JSON.parse('{"__proto__": {"isAdmin": true}}'));
+          safeMerge({ a: {} }, JSON.parse('{"a": {"__proto__": {"polluted": "yes"}}}'));
+          assert.equal(({}).isAdmin, undefined);
+          assert.equal(({}).polluted, undefined);
+        } finally {
+          clean();
+        }
+      });
+      test('"constructor" and "prototype" keys are ignored', () => {
+        try {
+          const target = {};
+          safeMerge(target, JSON.parse('{"constructor": {"prototype": {"isAdmin": true}}}'));
+          assert.equal(({}).isAdmin, undefined);
+          assert.equal(target.constructor, Object);
+        } finally {
+          clean();
+        }
+      });
+      test('the source is not changed', () => {
+        const source = { nested: { y: 3 } };
+        const target = safeMerge({ nested: { x: 1 } }, source);
+        target.nested.z = 9;
+        assert.deepEqual(source, { nested: { y: 3 } });
+      });
+    </script>
+  </div>
+</body>
+</html>

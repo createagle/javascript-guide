@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 36-3 · Start: Check Who Sent a Message</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 36-3">
+    <script type="text/plain" class="code">
+      // createMessageHandler({ allowedOrigins, handlers }) returns a function to use as a "message" listener:
+      //   window.addEventListener('message', createMessageHandler({ ... }))
+      // - ignore messages whose event.origin is not exactly one of allowedOrigins (no prefix or "includes" checks)
+      // - ignore data that is not an object of the form { type: string, payload }
+      // - ignore types without an own entry in handlers; otherwise call handlers[type](payload, event)
+      // The listener returns true when a handler ran, false when the message was ignored (handy for tests).
+      function createMessageHandler({ allowedOrigins, handlers }) {
+        return (event) => {
+          if (!allowedOrigins.some((origin) => event.origin.includes(origin))) return false;
+          handlers[event.data.type](event.data.payload, event);
+          return true;
+        };
+      }
+
+      const received = [];
+      const onMessage = createMessageHandler({
+        allowedOrigins: ['https://app.example.com'],
+        handlers: { resize: (payload) => received.push(`resize to ${payload.height}px`) },
+      });
+      // Fake events, the way a "message" event looks
+      onMessage({ origin: 'https://app.example.com', data: { type: 'resize', payload: { height: 300 } } });
+      onMessage({ origin: 'https://evil.example', data: { type: 'resize', payload: { height: 9999 } } });
+      console.log(received);
+    </script>
+    <script type="text/plain" class="tests">
+      const setup = () => {
+        const calls = [];
+        const handle = createMessageHandler({
+          allowedOrigins: ['https://app.example.com', 'https://admin.example.com'],
+          handlers: { resize: (payload, event) => calls.push(['resize', payload, event.origin]) },
+        });
+        return { calls, handle };
+      };
+      const msg = (origin, data) => ({ origin, data });
+
+      test('runs the handler for an allowed origin', () => {
+        const { calls, handle } = setup();
+        assert.equal(handle(msg('https://admin.example.com', { type: 'resize', payload: { height: 1 } })), true);
+        assert.deepEqual(calls, [['resize', { height: 1 }, 'https://admin.example.com']]);
+      });
+      test('origins must match exactly', () => {
+        const { calls, handle } = setup();
+        for (const origin of ['https://app.example.com.evil.net', 'http://app.example.com', 'https://evilapp.example.com', 'null']) {
+          assert.equal(handle(msg(origin, { type: 'resize', payload: {} })), false, `accepted ${origin}`);
+        }
+        assert.equal(calls.length, 0);
+      });
+      test('ignores data that is not { type, payload }', () => {
+        const { calls, handle } = setup();
+        for (const data of ['resize', null, 42, { kind: 'resize' }, { type: 7 }]) {
+          assert.equal(handle(msg('https://app.example.com', data)), false, `accepted ${JSON.stringify(data)}`);
+        }
+        assert.equal(calls.length, 0);
+      });
+      test('ignores unknown types, including inherited names', () => {
+        const { handle } = setup();
+        for (const type of ['delete', 'toString', '__proto__', 'constructor']) {
+          assert.equal(handle(msg('https://app.example.com', { type, payload: {} })), false, `accepted type ${type}`);
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>
