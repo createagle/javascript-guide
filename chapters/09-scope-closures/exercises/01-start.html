@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 9-1 · Start: A Counter With Private State</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 9-1">
+    <script type="text/plain" class="code">
+      // createCounter({ start = 0, step = 1 } = {}) returns an object with
+      // increment(), decrement(), reset() and value().
+      // The count itself must not be reachable from outside.
+      function createCounter() {
+        return {
+          count: 0,
+          increment() { this.count++; },
+        };
+      }
+
+      const c = createCounter({ start: 10, step: 5 });
+      c.increment();
+      console.log(c.value?.());
+    </script>
+    <script type="text/plain" class="tests">
+      test('starts at 0 by default', () => assert.equal(createCounter().value(), 0));
+      test('counts with a step', () => {
+        const c = createCounter({ start: 10, step: 5 });
+        c.increment();
+        c.increment();
+        c.decrement();
+        assert.equal(c.value(), 15);
+      });
+      test('reset goes back to the start', () => {
+        const c = createCounter({ start: 3 });
+        c.increment();
+        c.reset();
+        assert.equal(c.value(), 3);
+      });
+      test('counters are independent', () => {
+        const a = createCounter();
+        const b = createCounter();
+        a.increment();
+        assert.equal(b.value(), 0);
+      });
+      test('the count is private', () => {
+        const c = createCounter();
+        assert.deepEqual(Object.keys(c).toSorted(), ['decrement', 'increment', 'reset', 'value']);
+      });
+    </script>
+  </div>
+</body>
+</html>

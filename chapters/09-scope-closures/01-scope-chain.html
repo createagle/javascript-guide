@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>9-1 The Scope Chain</title>
+  <style>
+    .stage { width: min(900px, 100%); }
+    .stage > * { flex: 1 1 340px; }
+    .left { display: grid; gap: 16px; align-content: start; }
+    .code-list { margin: 0; padding: 12px 12px 12px 36px; font: 13px/1.5 var(--mono); white-space: pre; overflow-x: auto; }
+    .code-list li { padding: 2px 6px; border-radius: 6px; }
+    .code-list li.current { background: color-mix(in oklch, var(--accent) 18%, transparent); font-weight: 600; }
+    #scopes { display: grid; gap: 8px; }
+    .scope { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
+    .scope h3 { margin: 0 0 6px; font-size: 13px; }
+    .scope.kept { border-style: dashed; border-color: var(--warn); }
+    .scope.searched { border-color: var(--accent); }
+    .scope.found { border-width: 2px; background: color-mix(in oklch, var(--accent) 12%, var(--surface)); }
+    .scope dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font: 13px var(--mono); }
+    .scope dt { color: var(--muted); }
+    .scope dt.hit { color: var(--accent); font-weight: 700; }
+    .scope dd { margin: 0; }
+    .scope .empty { color: var(--muted); font-style: italic; grid-column: 1 / -1; }
+    .note { margin: 12px 0 0; min-height: 4.5em; font-size: 14px; }
+    #out { min-height: 3em; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control" for="program">Program</label>
+    <select id="program" class="btn"></select>
+    <button class="btn" id="prev" type="button">Back</button>
+    <output id="counter"></output>
+    <button class="btn btn-primary" id="next" type="button">Next step</button>
+  </div>
+  <div class="stage">
+    <div class="left">
+      <ol class="panel code-list" id="code"></ol>
+      <div class="panel"><p class="label">Console</p><pre class="code" id="out"></pre></div>
+    </div>
+    <div class="panel">
+      <p class="label">Scopes (inner → outer)</p>
+      <div id="scopes"></div>
+      <p class="note" id="note" aria-live="polite"></p>
+    </div>
+  </div>
+  <script>
+    // Each step: line, scopes (innermost first), optional lookup { name, path: [scope names searched], found }, output so far, note.
+    // A scope: { name, vars: { name: value }, kept: true when a closure keeps it alive after its function returned }
+    const G0 = { greeting: '<uninitialized>', makeGreeter: 'ƒ makeGreeter', greetAda: '<uninitialized>' };
+    const programs = {
+      'Closure': {
+        code: [
+          "const greeting = 'Hello';",
+          'function makeGreeter(name) {',
+          "  const punctuation = '!';",
+          '  return function greet() {',
+          '    return `${greeting}, ${name}${punctuation}`;',
+          '  };',
+          '}',
+          "const greetAda = makeGreeter('Ada');",
+          'console.log(greetAda());',
+        ],
+        steps: [
+          { line: -1, scopes: [{ name: 'global', vars: G0 }], note: 'Before any line runs, the global scope already knows every declaration. Function declarations are ready to call; const bindings exist but are uninitialized (the temporal dead zone).' },
+          { line: 0, scopes: [{ name: 'global', vars: { ...G0, greeting: "'Hello'" } }], note: 'greeting is initialized.' },
+          { line: 7, scopes: [{ name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: '<uninitialized>' } }, { name: 'global', vars: { ...G0, greeting: "'Hello'" } }], note: "Calling makeGreeter creates a new scope for this call, with name = 'Ada'. Its outer scope is where makeGreeter was written: global." },
+          { line: 2, scopes: [{ name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: "'!'" } }, { name: 'global', vars: { ...G0, greeting: "'Hello'" } }], note: 'punctuation is initialized.' },
+          { line: 3, scopes: [{ name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: "'!'" } }, { name: 'global', vars: { ...G0, greeting: "'Hello'" } }], note: 'A new function greet is created. It remembers the scope it was created in: this makeGreeter call.' },
+          { line: 7, scopes: [{ name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: "'!'" }, kept: true }, { name: 'global', vars: { ...G0, greeting: "'Hello'", greetAda: 'ƒ greet' } }], note: 'makeGreeter has returned, but its scope is not thrown away: greet still refers to it. That function + remembered scope is a closure.' },
+          { line: 8, scopes: [{ name: 'greet()', vars: {} }, { name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: "'!'" }, kept: true }, { name: 'global', vars: { ...G0, greeting: "'Hello'", greetAda: 'ƒ greet' } }], note: "Calling greetAda creates a scope for greet. Its outer scope is the remembered makeGreeter scope, not the place where greetAda is called." },
+          { line: 4, scopes: [{ name: 'greet()', vars: {} }, { name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: "'!'" }, kept: true }, { name: 'global', vars: { ...G0, greeting: "'Hello'", greetAda: 'ƒ greet' } }], lookup: { name: 'greeting', path: ['greet()', 'makeGreeter(…)', 'global'] }, note: 'Look up greeting: not in greet, not in makeGreeter, found in global.' },
+          { line: 4, scopes: [{ name: 'greet()', vars: {} }, { name: 'makeGreeter(…)', vars: { name: "'Ada'", punctuation: "'!'" }, kept: true }, { name: 'global', vars: { ...G0, greeting: "'Hello'", greetAda: 'ƒ greet' } }], lookup: { name: 'name', path: ['greet()', 'makeGreeter(…)'] }, note: "Look up name: found one scope out, in the remembered makeGreeter scope, even though makeGreeter finished long ago." },
+          { line: 8, scopes: [{ name: 'global', vars: { ...G0, greeting: "'Hello'", greetAda: 'ƒ greet' } }], out: 'Hello, Ada!', note: 'greet returns the string and its call scope disappears. The makeGreeter scope stays alive as long as greetAda exists.' },
+        ],
+      },
+      'Shadowing': {
+        code: [
+          "let x = 'global';",
+          'function show() {',
+          "  let x = 'function';",
+          '  if (true) {',
+          "    let x = 'block';",
+          '    console.log(x);',
+          '  }',
+          '  console.log(x);',
+          '}',
+          'show();',
+          'console.log(x);',
+        ],
+        steps: [
+          { line: 0, scopes: [{ name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], note: 'One x in the global scope.' },
+          { line: 9, scopes: [{ name: 'show()', vars: { x: '<uninitialized>' } }, { name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], note: 'show() gets its own scope with its own x. It is uninitialized until its let line runs.' },
+          { line: 2, scopes: [{ name: 'show()', vars: { x: "'function'" } }, { name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], note: "This x shadows the global one: inside show, the name x now means this variable." },
+          { line: 4, scopes: [{ name: 'if block', vars: { x: "'block'" } }, { name: 'show()', vars: { x: "'function'" } }, { name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], note: 'A block with let or const gets its own scope too. A third x shadows the other two.' },
+          { line: 5, scopes: [{ name: 'if block', vars: { x: "'block'" } }, { name: 'show()', vars: { x: "'function'" } }, { name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], lookup: { name: 'x', path: ['if block'] }, out: 'block', note: 'The lookup stops at the first scope that has x.' },
+          { line: 7, scopes: [{ name: 'show()', vars: { x: "'function'" } }, { name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], lookup: { name: 'x', path: ['show()'] }, out: 'block\nfunction', note: 'The block scope is gone; x now resolves in show().' },
+          { line: 10, scopes: [{ name: 'global', vars: { x: "'global'", show: 'ƒ show' } }], lookup: { name: 'x', path: ['global'] }, out: 'block\nfunction\nglobal', note: 'Back in global, only the global x is visible. Inner scopes can see outer variables, never the other way round.' },
+        ],
+      },
+    };
+
+    const $ = (id) => document.getElementById(id);
+    for (const name of Object.keys(programs)) $('program').add(new Option(name));
+    let i = 0;
+
+    function render() {
+      const program = programs[$('program').value];
+      const step = program.steps[i];
+      $('code').replaceChildren(...program.code.map((t, n) => Object.assign(document.createElement('li'), { textContent: t, className: n === step.line ? 'current' : '' })));
+      const lookupPath = step.lookup?.path ?? [];
+      $('scopes').replaceChildren(...step.scopes.map((scope) => {
+        const box = document.createElement('section');
+        box.className = 'scope' + (scope.kept ? ' kept' : '') + (lookupPath.includes(scope.name) ? ' searched' : '') + (lookupPath.at(-1) === scope.name ? ' found' : '');
+        const title = document.createElement('h3');
+        title.textContent = scope.name + (scope.kept ? ' · kept alive by a closure' : '');
+        box.append(title);
+        const vars = Object.entries(scope.vars);
+        const dl = document.createElement('dl');
+        for (const [k, v] of vars) {
+          const dt = Object.assign(document.createElement('dt'), { textContent: k });
+          if (step.lookup?.name === k && lookupPath.at(-1) === scope.name) dt.className = 'hit';
+          dl.append(dt, Object.assign(document.createElement('dd'), { textContent: v }));
+        }
+        if (!vars.length) dl.append(Object.assign(document.createElement('dd'), { textContent: '(no variables)', className: 'empty' }));
+        box.append(dl);
+        return box;
+      }));
+      $('note').textContent = step.note;
+      const outSoFar = [...program.steps.slice(0, i + 1)].reverse().find((s) => s.out !== undefined)?.out ?? '';
+      $('out').textContent = outSoFar;
+      $('counter').textContent = `Step ${i + 1} of ${program.steps.length}`;
+      $('prev').disabled = i === 0;
+      $('next').disabled = i === program.steps.length - 1;
+    }
+    $('next').addEventListener('click', () => { i++; render(); });
+    $('prev').addEventListener('click', () => { i--; render(); });
+    $('program').addEventListener('change', () => { i = 0; render(); });
+    render();
+  </script>
+</body>
+</html>

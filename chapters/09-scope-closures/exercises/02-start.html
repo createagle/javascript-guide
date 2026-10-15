@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 9-2 · Start: Fix the Loop Closures</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 9-2">
+    <script type="text/plain" class="code">
+      // makeHandlers(3) should return three functions; calling handler k returns 'Item k'.
+      // Right now they all return the same text. Fix it.
+      function makeHandlers(n) {
+        var handlers = [];
+        for (var i = 0; i < n; i++) {
+          handlers.push(function () {
+            return 'Item ' + i;
+          });
+        }
+        return handlers;
+      }
+
+      console.log(makeHandlers(3).map((h) => h()));
+    </script>
+    <script type="text/plain" class="tests">
+      test('each handler remembers its own index', () => assert.deepEqual(makeHandlers(3).map((h) => h()), ['Item 0', 'Item 1', 'Item 2']));
+      test('works for one handler', () => assert.equal(makeHandlers(1)[0](), 'Item 0'));
+      test('works for zero handlers', () => assert.deepEqual(makeHandlers(0), []));
+    </script>
+  </div>
+</body>
+</html>

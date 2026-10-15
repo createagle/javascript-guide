@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 9-3 · Start: memoize()</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 9-3">
+    <script type="text/plain" class="code">
+      // memoize(fn) returns a function that calls fn at most once per argument
+      // and returns the remembered result after that.
+      function memoize(fn) {
+        return fn;
+      }
+
+      let calls = 0;
+      const slowDouble = (n) => { calls++; return n * 2; };
+      const fastDouble = memoize(slowDouble);
+      fastDouble(5);
+      fastDouble(5);
+      console.log('calls:', calls);   // should be 1
+    </script>
+    <script type="text/plain" class="tests">
+      test('returns the same results as fn', () => {
+        const m = memoize((n) => n * 3);
+        assert.equal(m(2), 6);
+        assert.equal(m(4), 12);
+      });
+      test('calls fn once per argument', () => {
+        let count = 0;
+        const m = memoize((n) => { count++; return n; });
+        m(1); m(1); m(2); m(1); m(2);
+        assert.equal(count, 2);
+      });
+      test('remembers results that are falsy', () => {
+        let count = 0;
+        const m = memoize(() => { count++; return 0; });
+        m('a'); m('a');
+        assert.equal(count, 1);
+      });
+      test('each memoized function has its own cache', () => {
+        const a = memoize((n) => n + 1);
+        const b = memoize((n) => n + 2);
+        assert.equal(a(1), 2);
+        assert.equal(b(1), 3);
+      });
+    </script>
+  </div>
+</body>
+</html>

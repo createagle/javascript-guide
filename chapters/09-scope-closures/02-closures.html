@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <script src="../../assets/playground.js" defer></script>
+  <title>9-2 Closures in Practice</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Closures">
+    <script type="text/plain" class="code" data-name="A counter with private state">
+      function createCounter() {
+        let count = 0;                 // only the functions below can reach this
+        return {
+          increment: () => ++count,
+          reset: () => { count = 0; },
+          get value() { return count; },
+        };
+      }
+
+      const a = createCounter();
+      const b = createCounter();       // a separate count
+      a.increment();
+      a.increment();
+      b.increment();
+      console.log(a.value, b.value);
+      console.log(a.count);            // undefined: not a property
+    </script>
+    <script type="text/plain" class="code" data-name="Loops: var versus let">
+      const withVar = [];
+      for (var i = 0; i < 3; i++) {
+        withVar.push(() => i);         // every closure shares the one function-wide i
+      }
+
+      const withLet = [];
+      for (let j = 0; j < 3; j++) {
+        withLet.push(() => j);         // let creates a new j for each iteration
+      }
+
+      console.log(withVar.map((f) => f()));
+      console.log(withLet.map((f) => f()));
+    </script>
+    <script type="text/plain" class="code" data-name="Hoisting and the TDZ">
+      console.log(typeof declared);    // function declarations are hoisted whole
+      function declared() {}
+
+      console.log(typeof oldStyle);    // var is hoisted as undefined
+      var oldStyle = 1;
+
+      try {
+        console.log(modern);           // let/const exist but cannot be used yet
+      } catch (error) {
+        console.error(error.name + ': ' + error.message);
+      }
+      let modern = 2;
+
+      {
+        function insideBlock() {}
+      }
+      console.log(typeof insideBlock); // strict mode: block-scoped
+    </script>
+    <script type="text/plain" class="code" data-name="Memoizing with a closure">
+      function memoize(fn) {
+        const cache = new Map();       // lives as long as the returned function
+        return (n) => {
+          if (!cache.has(n)) cache.set(n, fn(n));
+          return cache.get(n);
+        };
+      }
+
+      let calls = 0;
+      const slowSquare = (n) => { calls++; return n * n; };
+      const fastSquare = memoize(slowSquare);
+
+      console.log(fastSquare(9), fastSquare(9), fastSquare(4));
+      console.log('slowSquare ran', calls, 'times');
+    </script>
+    <script type="text/plain" class="code" data-name="once()">
+      function once(fn) {
+        let done = false;
+        let result;
+        return (...args) => {
+          if (!done) {
+            done = true;
+            result = fn(...args);
+          }
+          return result;
+        };
+      }
+
+      const init = once(() => {
+        console.log('initializing…');
+        return 42;
+      });
+      console.log(init(), init(), init());
+    </script>
+  </div>
+</body>
+</html>
