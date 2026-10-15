@@ -51,8 +51,7 @@ const p = new Proxy(target, logEveryTrap);</pre>
     const logEveryTrap = {};
     for (const trap of Object.getOwnPropertyNames(Reflect)) {
       logEveryTrap[trap] = (...args) => {
-        const key = args[1];
-        calls.push({ trap, key: typeof key === 'string' || typeof key === 'symbol' ? String(key) : '' });
+        calls.push({ trap, key: String(args[1] ?? '') });
         return Reflect[trap](...args);
       };
     }
