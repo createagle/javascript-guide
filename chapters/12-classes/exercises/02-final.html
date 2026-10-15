@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 12-2 · Final: extends and super</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 12-2">
+    <script type="text/plain" class="code">
+      // Shape keeps a name and builds a description from area().
+      // Finish Circle(radius) and Rect(width, height): both extend Shape,
+      // pass their name ('Circle' or 'Rect') to Shape and implement area().
+      class Shape {
+        constructor(name) {
+          this.name = name;
+        }
+        area() {
+          throw new Error('Subclasses must implement area()');
+        }
+        describe() {
+          return `${this.name} with area ${this.area().toFixed(2)}`;
+        }
+      }
+
+      class Circle extends Shape {
+        constructor(radius) {
+          super('Circle');            // must come before any use of this
+          this.radius = radius;
+        }
+        area() {
+          return Math.PI * this.radius ** 2;
+        }
+      }
+
+      class Rect extends Shape {
+        constructor(width, height) {
+          super('Rect');
+          this.width = width;
+          this.height = height;
+        }
+        area() {
+          return this.width * this.height;
+        }
+      }
+
+      console.log(new Circle(1).describe());
+    </script>
+    <script type="text/plain" class="tests">
+      test('a circle describes itself', () => assert.equal(new Circle(1).describe(), 'Circle with area 3.14'));
+      test('a rectangle describes itself', () => assert.equal(new Rect(2, 3).describe(), 'Rect with area 6.00'));
+      test('both are shapes', () => {
+        assert.ok(new Circle(2) instanceof Shape);
+        assert.ok(new Rect(1, 1) instanceof Shape);
+      });
+      test('describe is inherited, area is their own', () => {
+        assert.ok(!Object.hasOwn(Circle.prototype, 'describe'));
+        assert.ok(Object.hasOwn(Circle.prototype, 'area'));
+        assert.ok(Object.hasOwn(Rect.prototype, 'area'));
+      });
+      test('a plain Shape has no area', () => assert.throws(() => new Shape('Blob').area()));
+    </script>
+  </div>
+</body>
+</html>

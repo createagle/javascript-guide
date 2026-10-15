@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>12-2 Private Fields</title>
+  <style>
+    .intro { margin: 0; max-width: 720px; text-align: center; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; width: min(1000px, 100%); align-items: start; }
+    .card h2 { margin: 0 0 8px; font-size: 15px; }
+    .card pre.code { font-size: 12px; line-height: 1.45; white-space: pre; word-break: normal; }
+    .balance { margin: 12px 0 8px; font: 700 18px var(--mono); }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .actions .btn { font-family: var(--mono); font-size: 12px; }
+    .log { list-style: none; margin: 10px 0 0; padding: 0; max-height: 220px; overflow: auto; font-size: 12px; }
+    .log li { padding: 4px 0; border-top: 1px solid var(--border); display: grid; gap: 2px; }
+    .log .ok { color: var(--good); font-family: var(--mono); }
+    .log .bad { color: var(--bad); font-family: var(--mono); overflow-wrap: anywhere; }
+  </style>
+</head>
+<body class="demo">
+  <p class="intro">Two bank accounts with the same methods. One keeps its balance in <code>_balance</code>, a naming convention; the other in <code>#balance</code>, a real private field. Try to cheat both.</p>
+  <div class="cards" id="cards"></div>
+  <script>
+    'use strict';
+    class LooseAccount {
+      constructor(owner) {
+        this.owner = owner;
+        // "please don't touch": only a convention
+        this._balance = 0;
+      }
+      get balance() {
+        return this._balance;
+      }
+      deposit(amount) {
+        this._balance += amount;
+      }
+      withdraw(amount) {
+        if (amount > this._balance) {
+          throw new RangeError('Not enough money');
+        }
+        this._balance -= amount;
+      }
+    }
+
+    class SafeAccount {
+      // only code inside this class body can reach it
+      #balance = 0;
+      constructor(owner) {
+        this.owner = owner;
+      }
+      get balance() {
+        return this.#balance;
+      }
+      deposit(amount) {
+        this.#balance += amount;
+      }
+      withdraw(amount) {
+        if (amount > this.#balance) {
+          throw new RangeError('Not enough money');
+        }
+        this.#balance -= amount;
+      }
+      static isAccount(value) {
+        return #balance in value;
+      }
+    }
+
+    // Every action is shown as the code it runs, then its result
+    const COMMON = [
+      ['account.deposit(50)', (a) => a.deposit(50)],
+      ['account.withdraw(30)', (a) => a.withdraw(30)],
+      ['account.withdraw(500)', (a) => a.withdraw(500)],
+      ['account.balance = 1_000_000', (a) => { a.balance = 1_000_000; }],
+    ];
+    const CARDS = [
+      [LooseAccount, 'Convention: _balance', [
+        ...COMMON,
+        ['account._balance = 1_000_000', (a) => { a._balance = 1_000_000; }],
+        ['JSON.stringify(account)', (a) => JSON.stringify(a)],
+      ]],
+      [SafeAccount, 'Private field: #balance', [
+        ...COMMON,
+        ["account['#balance'] = 1_000_000", (a) => { a['#balance'] = 1_000_000; }],
+        ['JSON.stringify(account)', (a) => JSON.stringify(a)],
+        ['SafeAccount.isAccount(account)', (a) => SafeAccount.isAccount(a)],
+        ["SafeAccount.isAccount({ owner: 'Eve', balance: 1e6 })", () => SafeAccount.isAccount({ owner: 'Eve', balance: 1e6 })],
+      ]],
+    ];
+
+    // toString() keeps the indentation the class had in this file: remove it from every line after the first
+    function dedent(source) {
+      const [first, ...rest] = source.split('\n');
+      const indent = Math.min(...rest.filter((line) => line.trim()).map((line) => line.match(/^ */)[0].length));
+      return [first, ...rest.map((line) => line.slice(indent))].join('\n');
+    }
+
+    for (const [Cls, title, actions] of CARDS) {
+      const account = new Cls('Ada');
+      const card = document.createElement('section');
+      card.className = 'panel card';
+      card.innerHTML = '<h2></h2><pre class="code"></pre><p class="balance"></p><div class="actions"></div><ol class="log" aria-live="polite"></ol>';
+      card.querySelector('h2').textContent = title;
+      card.querySelector('pre').textContent = dedent(Cls.toString());
+      const balance = card.querySelector('.balance');
+      const log = card.querySelector('.log');
+      const show = () => { balance.textContent = `account.balance: ${account.balance.toLocaleString('en')}`; };
+      for (const [code, act] of actions) {
+        const button = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: code });
+        button.addEventListener('click', () => {
+          const li = document.createElement('li');
+          li.append(Object.assign(document.createElement('code'), { textContent: code }));
+          let result;
+          try {
+            const value = act(account);
+            result = Object.assign(document.createElement('span'), { className: 'ok', textContent: value === undefined ? 'done' : '→ ' + (typeof value === 'string' ? value : JSON.stringify(value)) });
+          } catch (error) {
+            result = Object.assign(document.createElement('span'), { className: 'bad', textContent: `✗ ${error.name}: ${error.message}` });
+          }
+          li.append(result);
+          log.prepend(li);
+          show();
+        });
+        card.querySelector('.actions').append(button);
+      }
+      show();
+      document.getElementById('cards').append(card);
+    }
+  </script>
+</body>
+</html>

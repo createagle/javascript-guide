@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 12-3 · Start: Getters, Setters and static</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 12-3">
+    <script type="text/plain" class="code">
+      // Temperature keeps degrees Celsius in a private field.
+      // - new Temperature(c) throws a RangeError below absolute zero (-273.15)
+      // - celsius: a getter and a setter (the setter applies the same check)
+      // - fahrenheit: a getter only, celsius * 9 / 5 + 32
+      // - static fromFahrenheit(f) creates a Temperature
+      // - static isTemperature(value) is true only for real Temperature objects
+      class Temperature {
+        constructor(celsius) {
+          this.celsius = celsius;
+        }
+      }
+
+      console.log(new Temperature(100).fahrenheit);
+    </script>
+    <script type="text/plain" class="tests">
+      test('converts to Fahrenheit', () => assert.equal(new Temperature(100).fahrenheit, 212));
+      test('creates from Fahrenheit', () => assert.equal(Temperature.fromFahrenheit(212).celsius, 100));
+      test('rejects impossible temperatures', () => assert.throws(() => new Temperature(-300), RangeError));
+      test('the setter checks too', () => {
+        const t = new Temperature(20);
+        assert.throws(() => { t.celsius = -500; }, RangeError);
+        assert.equal(t.celsius, 20);
+        t.celsius = 25;
+        assert.equal(t.fahrenheit, 77);
+      });
+      test('fahrenheit is read-only', () => assert.throws(() => { new Temperature(0).fahrenheit = 50; }, TypeError));
+      test('the value is private', () => assert.deepEqual(Object.keys(new Temperature(0)), []));
+      test('isTemperature tells real ones from look-alikes', () => {
+        assert.equal(Temperature.isTemperature(new Temperature(0)), true);
+        assert.equal(Temperature.isTemperature({ celsius: 0, fahrenheit: 32 }), false);
+        assert.equal(Temperature.isTemperature(42), false);
+      });
+    </script>
+  </div>
+</body>
+</html>

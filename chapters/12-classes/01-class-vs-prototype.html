@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>12-1 Class vs Prototype</title>
+  <style>
+    .stage { width: min(1000px, 100%); }
+    .stage > figure { flex: 1 1 380px; }
+    .stage pre.code { font-size: 12px; white-space: pre; word-break: normal; }
+    .table-panel { width: min(1000px, 100%); }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+    thead th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    tbody th { font-weight: 500; min-width: 12em; }
+    td { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; min-width: 12em; }
+    td.error { color: var(--bad); }
+    tr.diff, .diff-key { background: color-mix(in oklch, var(--warn) 14%, transparent); }
+    .diff-key { padding: 0 4px; border-radius: 4px; }
+  </style>
+</head>
+<body class="demo">
+  <div class="stage">
+    <figure class="panel">
+      <p class="label">With class</p>
+      <pre class="code" id="class-src"></pre>
+    </figure>
+    <figure class="panel">
+      <p class="label">With functions and prototypes</p>
+      <pre class="code" id="func-src"></pre>
+    </figure>
+  </div>
+  <div class="panel table-panel">
+    <p class="label">Each check runs both versions live, in strict mode. <span class="diff-key">Highlighted</span> rows differ.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th scope="col">Check</th><th scope="col">class</th><th scope="col">functions</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    'use strict';
+    const CLASS_SRC = `class Animal {
+  constructor(name) {
+    this.name = name;
+  }
+  speak() {
+    return \`\${this.name} makes a sound\`;
+  }
+  static create(name) {
+    return new this(name);
+  }
+}
+
+class Dog extends Animal {
+  speak() {
+    return super.speak() + ' (woof)';
+  }
+}`;
+    const FUNC_SRC = `function Animal(name) {
+  this.name = name;
+}
+Animal.prototype.speak = function () {
+  return \`\${this.name} makes a sound\`;
+};
+Animal.create = function (name) {
+  return new this(name);
+};
+
+function Dog(name) {
+  Animal.call(this, name);
+}
+Dog.prototype = Object.create(Animal.prototype);
+Dog.prototype.constructor = Dog;
+Dog.prototype.speak = function () {
+  return Animal.prototype.speak.call(this) + ' (woof)';
+};`;
+
+    // [label, expression to evaluate after the source, optional code to run *before* the source]
+    const CHECKS = [
+      ['typeof Dog', 'typeof Dog'],
+      ["new Dog('Rex').speak()", "new Dog('Rex').speak()"],
+      ['Dog.prototype inherits Animal.prototype', 'Object.getPrototypeOf(Dog.prototype) === Animal.prototype'],
+      ["new Dog('Rex') instanceof Animal", "new Dog('Rex') instanceof Animal"],
+      ['Object.keys(Dog.prototype): are methods enumerable?', 'Object.keys(Dog.prototype)'],
+      ["Dog('Rex') without new", "Dog('Rex')"],
+      ['Using Dog before its declaration', 'rex.speak()', "const rex = new Dog('Rex');\n"],
+      ['Dog inherits static methods: Dog.create(…)', "Dog.create('Rex').speak()"],
+      ['Object.getPrototypeOf(Dog) === Animal', 'Object.getPrototypeOf(Dog) === Animal'],
+    ];
+
+    function run(source, expression, before = '') {
+      try {
+        const value = new Function(`"use strict";\n${before}${source}\nreturn ${expression};`)();
+        return { text: JSON.stringify(value), ok: true };
+      } catch (error) {
+        return { text: `${error.name}: ${error.message}`, ok: false };
+      }
+    }
+
+    document.getElementById('class-src').textContent = CLASS_SRC;
+    document.getElementById('func-src').textContent = FUNC_SRC;
+    document.getElementById('rows').replaceChildren(...CHECKS.map(([label, expression, before]) => {
+      const a = run(CLASS_SRC, expression, before);
+      const b = run(FUNC_SRC, expression, before);
+      const tr = document.createElement('tr');
+      if (a.text !== b.text) tr.className = 'diff';
+      const th = Object.assign(document.createElement('th'), { scope: 'row', textContent: label });
+      tr.append(th, ...[a, b].map((r) => Object.assign(document.createElement('td'), { textContent: r.ok ? r.text : '✗ ' + r.text, className: r.ok ? '' : 'error' })));
+      return tr;
+    }));
+  </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 12-1 · Start: A Stack Class</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 12-1">
+    <script type="text/plain" class="code">
+      // Rewrite Stack as a class that keeps its items in a private #items array.
+      // It needs push(value), pop(), peek() and a size getter.
+      function Stack() {
+        this.items = [];
+      }
+      Stack.prototype.push = function (value) {
+        this.items.push(value);
+      };
+      Stack.prototype.pop = function () {
+        return this.items.pop();
+      };
+
+      const s = new Stack();
+      s.push(1);
+      s.push(2);
+      console.log(s.pop(), s.size);
+    </script>
+    <script type="text/plain" class="tests">
+      test('is a class', () => assert.match(Stack.toString(), /^class\b/));
+      test('last in, first out', () => {
+        const st = new Stack();
+        st.push('a');
+        st.push('b');
+        assert.equal(st.pop(), 'b');
+        assert.equal(st.pop(), 'a');
+        assert.equal(st.pop(), undefined);
+      });
+      test('peek does not remove', () => {
+        const st = new Stack();
+        st.push(7);
+        assert.equal(st.peek(), 7);
+        assert.equal(st.size, 1);
+      });
+      test('size is a getter', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(Stack.prototype, 'size');
+        assert.equal(typeof descriptor?.get, 'function');
+      });
+      test('the items are private', () => assert.deepEqual(Object.keys(new Stack()), []));
+    </script>
+  </div>
+</body>
+</html>
