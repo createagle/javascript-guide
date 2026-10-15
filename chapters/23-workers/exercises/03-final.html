@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 23-3 · Final: Split the Work Across Workers</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 23-3">
+    <script type="text/plain" class="code">
+      // A worker that adds up the Float64Array it receives and posts back the sum
+      const SUM_WORKER_URL = URL.createObjectURL(new Blob([`
+        onmessage = ({ data }) => {
+          let sum = 0;
+          for (const n of data) sum += n;
+          postMessage(sum);
+        };
+      `], { type: 'text/javascript' }));
+
+      const numbers = Float64Array.from({ length: 100000 }, (_, i) => i + 1);
+
+      // parallelSum(numbers, workerCount) should split numbers into workerCount parts,
+      // send each part to its own worker (transfer, don't copy), add up their answers,
+      // and terminate every worker when it is done. `numbers` itself must stay usable.
+      async function parallelSum(numbers, workerCount) {
+        const size = Math.ceil(numbers.length / workerCount);
+        const jobs = Array.from({ length: workerCount }, (_, i) => {
+          // slice() makes a copy of this part with its own buffer, which can then be transferred
+          const part = numbers.slice(i * size, (i + 1) * size);
+          const worker = new Worker(SUM_WORKER_URL);
+          return new Promise((resolve, reject) => {
+            worker.onmessage = (event) => resolve(event.data);
+            worker.onerror = (event) => reject(new Error(event.message));
+            worker.postMessage(part, [part.buffer]);
+          }).finally(() => worker.terminate());
+        });
+        const sums = await Promise.all(jobs);
+        return sums.reduce((total, sum) => total + sum, 0);
+      }
+
+      console.log(await parallelSum(numbers, 4));
+    </script>
+    <script type="text/plain" class="tests">
+      // Count the workers parallelSum creates and terminates
+      const RealWorker = Worker;
+      const stats = { created: 0, terminated: 0 };
+      globalThis.Worker = class extends RealWorker {
+        constructor(...args) { super(...args); stats.created++; }
+        terminate() { stats.terminated++; super.terminate(); }
+      };
+      test('adds up correctly', async () => assert.equal(await parallelSum(numbers, 4), 5000050000));
+      test('uses one worker per part, and terminates them', async () => {
+        stats.created = stats.terminated = 0;
+        await parallelSum(numbers, 3);
+        assert.equal(stats.created, 3);
+        assert.equal(stats.terminated, 3);
+      });
+      test('works when the parts are uneven', async () => assert.equal(await parallelSum(Float64Array.of(1, 2, 3, 4, 5), 2), 15));
+      test('the input array is still usable', async () => {
+        await parallelSum(numbers, 2);
+        assert.equal(numbers.length, 100000);
+        assert.equal(numbers[99999], 100000);
+      });
+    </script>
+  </div>
+</body>
+</html>

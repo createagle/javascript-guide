@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 23-1 · Start: Make a Message Cloneable</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 23-1">
+    <script type="text/plain" class="code">
+      class Task {
+        constructor(id, title, due) {
+          this.id = id;
+          this.title = title;
+          this.due = due;                     // a Date
+        }
+        isOverdue(now = new Date()) {
+          return this.due < now;
+        }
+      }
+      const tasks = new Map([
+        [1, new Task(1, 'Write report', new Date('2026-03-01'))],
+        [2, new Task(2, 'Plan trip', new Date('2026-09-15'))],
+      ]);
+      const onDone = () => console.log('saved');
+
+      // postMessage copies data with the structured clone algorithm, just like structuredClone().
+      // toMessage(tasks, onDone) must return something that can be cloned,
+      // and fromMessage(data) must turn the copy back into a Map of real Task objects.
+      function toMessage(tasks, onDone) {
+        return { tasks, onDone };
+      }
+      function fromMessage(data) {
+        return data.tasks;
+      }
+
+      try {
+        const copy = fromMessage(structuredClone(toMessage(tasks, onDone)));
+        console.log(copy.get(1).isOverdue(new Date('2026-04-01')));
+      } catch (error) {
+        console.log(`${error.name}: ${error.message}`);
+      }
+    </script>
+    <script type="text/plain" class="tests">
+      test('the message can be cloned', () => structuredClone(toMessage(tasks, onDone)));
+      test('the copy is a Map of Task objects', () => {
+        const copy = fromMessage(structuredClone(toMessage(tasks, onDone)));
+        assert.ok(copy instanceof Map);
+        assert.ok(copy.get(2) instanceof Task);
+        assert.equal(copy.get(2).title, 'Plan trip');
+      });
+      test('the dates are still Dates', () => {
+        const copy = fromMessage(structuredClone(toMessage(tasks, onDone)));
+        assert.ok(copy.get(1).due instanceof Date);
+        assert.equal(copy.get(1).isOverdue(new Date('2026-04-01')), true);
+        assert.equal(copy.get(2).isOverdue(new Date('2026-04-01')), false);
+      });
+      test('the copy is not the original', () => {
+        const copy = fromMessage(structuredClone(toMessage(tasks, onDone)));
+        assert.notEqual(copy.get(1), tasks.get(1));
+      });
+    </script>
+  </div>
+</body>
+</html>

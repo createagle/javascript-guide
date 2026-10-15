@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>23-2 Counting Primes with Several Workers</title>
+  <style>
+    .jobs { width: min(720px, 100%); }
+    .note { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+    .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .bars li { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 5.5em; gap: 10px; align-items: center; font: 12px var(--mono); }
+    .bars progress { width: 100%; height: 14px; accent-color: var(--accent); }
+    .pct { text-align: right; color: var(--muted); }
+    .result { margin: 14px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+    .result.good { color: var(--good); }
+    .result.bad { color: var(--bad); }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Primes below
+      <select class="btn" id="limit">
+        <option value="10000000">10 million</option>
+        <option value="20000000" selected>20 million</option>
+        <option value="40000000">40 million</option>
+      </select></label>
+    <label class="control">Workers
+      <input type="range" id="count" min="1" max="8" value="4"><output id="countOut">4</output></label>
+    <button class="btn btn-primary" id="start" type="button">Start</button>
+    <button class="btn" id="cancel" type="button" disabled>Cancel</button>
+  </div>
+  <div class="panel jobs">
+    <p class="note" id="cores"></p>
+    <ol class="bars" id="bars"></ol>
+    <p class="result" id="result" aria-live="polite">Press Start.</p>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const cores = navigator.hardwareConcurrency || 4;
+    $('cores').textContent = `This device reports ${cores} logical processor(s). Each worker gets an equal slice of the numbers.`;
+    $('count').addEventListener('input', () => { $('countOut').textContent = $('count').value; });
+
+    // One worker for one range; resolves with its primes, or rejects when the signal aborts
+    function countInWorker(from, to, onProgress, signal) {
+      const worker = new Worker(new URL('./primes-worker.js', import.meta.url), { type: 'module' });
+      return new Promise((resolve, reject) => {
+        let primes;
+        worker.onmessage = ({ data }) => {
+          if (data.type === 'progress') onProgress(data.fraction);
+          if (data.type === 'done') primes = data.primes;
+          if (data.type === 'transferred') {
+            worker.terminate();
+            resolve({ primes, leftInWorker: data.byteLengthHere });
+          }
+        };
+        worker.onerror = (event) => {
+          worker.terminate();
+          reject(new Error(event.message || 'The worker failed to start'));
+        };
+        signal.addEventListener('abort', () => {
+          worker.terminate();                 // stops the worker at once, mid-loop
+          reject(signal.reason);
+        }, { once: true });
+        worker.postMessage({ from, to });
+      });
+    }
+
+    let controller;
+    async function start() {
+      const limit = Number($('limit').value);
+      const count = $('count').valueAsNumber;
+      const size = Math.ceil(limit / count);
+      controller = new AbortController();
+      $('start').disabled = true;
+      $('cancel').disabled = false;
+      $('result').className = 'result';
+      $('result').textContent = 'Counting…';
+      const rows = Array.from({ length: count }, (_, i) => {
+        const li = document.createElement('li');
+        const from = i * size;
+        const to = Math.min(limit, from + size);
+        li.innerHTML = '<span class="name"></span><progress max="1" value="0"></progress><span class="pct">0%</span>';
+        li.querySelector('.name').textContent = `${(from / 1e6).toFixed(1)}M–${(to / 1e6).toFixed(1)}M`;
+        li.querySelector('progress').setAttribute('aria-label', `Worker ${i + 1}`);
+        return { li, from, to, bar: li.querySelector('progress'), pct: li.querySelector('.pct') };
+      });
+      $('bars').replaceChildren(...rows.map((r) => r.li));
+      const t0 = performance.now();
+      try {
+        const results = await Promise.all(rows.map((row) => countInWorker(row.from, row.to, (fraction) => {
+          row.bar.value = fraction;
+          row.pct.textContent = `${Math.round(fraction * 100)}%`;
+        }, controller.signal).then((result) => {
+          row.bar.value = 1;
+          row.pct.textContent = `${Math.round(performance.now() - t0)} ms`;
+          return result;
+        })));
+        const ms = Math.round(performance.now() - t0);
+        const total = results.reduce((n, r) => n + r.primes.length, 0);
+        const bytes = results.reduce((n, r) => n + r.primes.byteLength, 0);
+        const largest = results.at(-1).primes.at(-1);
+        $('result').textContent = `${total.toLocaleString('en')} primes below ${limit.toLocaleString('en')} in ${ms.toLocaleString('en')} ms with ${count} worker(s); the largest is ${largest.toLocaleString('en')}. ` +
+          `The primes arrived as transferred buffers (${(bytes / 1e6).toFixed(1)} MB, not copied): in the workers their byteLength is now ${results[0].leftInWorker}.`;
+        $('result').className = 'result good';
+      } catch (error) {
+        // Promise.all rejects on the first failure; abort the rest too
+        controller.abort();
+        $('result').textContent = error.name === 'AbortError' ? 'Cancelled: every worker was terminated.' : `Failed: ${error.message}`;
+        $('result').className = 'result bad';
+      }
+      $('start').disabled = false;
+      $('cancel').disabled = true;
+    }
+    $('start').addEventListener('click', start);
+    $('cancel').addEventListener('click', () => controller.abort());
+  </script>
+</body>
+</html>

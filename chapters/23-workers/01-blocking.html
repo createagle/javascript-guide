@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>23-1 Main Thread vs Web Worker</title>
+  <style>
+    .live { width: min(640px, 100%); display: grid; gap: 14px; }
+    .track { container-type: inline-size; position: relative; height: 24px; margin-right: 24px; }
+    .track::before { content: ""; position: absolute; left: 0; right: -24px; top: 11px; height: 2px; background: var(--border); }
+    .ball { position: absolute; top: 0; left: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); }
+    .readouts { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; color: var(--muted); align-items: center; }
+    .readouts output { font-family: var(--mono); color: var(--fg); }
+    .spin-wrap { display: inline-flex; align-items: center; gap: 8px; }
+    .spinner { width: 16px; height: 16px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .type-here { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+    .type-here input { font: inherit; color: var(--fg); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    .result { max-width: 640px; margin: 0; text-align: center; font-weight: 600; }
+    .result.good { color: var(--good); }
+    .result.bad { color: var(--bad); }
+    @media (prefers-reduced-motion: reduce) {
+      .ball { transform: none !important; }
+      .spinner { animation-duration: 3s; }
+    }
+  </style>
+</head>
+<body class="demo">
+  <div class="stage">
+    <div class="panel live">
+      <div class="track" aria-hidden="true"><span class="ball" id="ball"></span></div>
+      <div class="readouts">
+        <span>requestAnimationFrame clock: <output id="clock">0</output></span>
+        <span>Longest gap between frames: <output id="gap">–</output></span>
+        <span class="spin-wrap">CSS animation <span class="spinner" aria-hidden="true"></span></span>
+      </div>
+      <label class="type-here">Type here while it computes
+        <input type="text" id="typing" autocomplete="off"></label>
+    </div>
+  </div>
+  <div class="controls">
+    <label class="control">Count the primes below
+      <select class="btn" id="limit">
+        <option value="5000000">5,000,000</option>
+        <option value="10000000" selected>10,000,000</option>
+        <option value="20000000">20,000,000</option>
+      </select></label>
+    <button class="btn" id="main" type="button">On the main thread</button>
+    <button class="btn btn-primary" id="worker" type="button">In a Web Worker</button>
+  </div>
+  <p class="result" id="result" aria-live="polite">Run both and compare the clock, the ball and the text box.</p>
+  <script type="module">
+    import { primesBetween } from './primes.js';
+
+    const $ = (id) => document.getElementById(id);
+    let last = performance.now();
+    let longest = 0;
+    let frames = 0;
+
+    // Every frame: move the ball and advance the clock. When the main thread is busy, no frames run.
+    function frame() {
+      const now = performance.now();
+      longest = Math.max(longest, now - last);
+      last = now;
+      frames++;
+      $('clock').textContent = frames;
+      $('ball').style.transform = `translateX(${(Math.sin(now / 400) + 1) / 2 * 100}cqi)`;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    function onWorker(from, to) {
+      const worker = new Worker(new URL('./primes-worker.js', import.meta.url), { type: 'module' });
+      return new Promise((resolve, reject) => {
+        worker.onmessage = ({ data }) => {
+          if (data.type === 'done') {
+            worker.terminate();
+            resolve(data.primes);
+          }
+        };
+        worker.onerror = (event) => {
+          worker.terminate();
+          reject(new Error(event.message || 'The worker failed to start'));
+        };
+        worker.postMessage({ from, to });
+      });
+    }
+
+    async function run(where) {
+      const limit = Number($('limit').value);
+      for (const b of [$('main'), $('worker')]) b.disabled = true;
+      $('result').textContent = `Counting on the ${where === 'main' ? 'main thread' : 'worker'}…`;
+      // Let the page paint the message before the work starts
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      longest = 0;
+      const start = performance.now();
+      try {
+        const primes = where === 'main' ? primesBetween(0, limit) : await onWorker(0, limit);
+        const ms = Math.round(performance.now() - start);
+        // Wait one frame so the longest gap includes the end of the work
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        $('gap').textContent = `${Math.round(longest)} ms`;
+        $('result').textContent = `${where === 'main' ? 'Main thread' : 'Web Worker'}: ${primes.length.toLocaleString('en')} primes in ${ms.toLocaleString('en')} ms. ` +
+          `Longest gap between frames: ${Math.round(longest).toLocaleString('en')} ms ${longest > 100 ? '(the page was frozen)' : '(the page stayed smooth)'}.`;
+        $('result').className = `result ${longest > 100 ? 'bad' : 'good'}`;
+      } catch (error) {
+        $('result').textContent = `The worker failed: ${error.message}`;
+        $('result').className = 'result bad';
+      }
+      for (const b of [$('main'), $('worker')]) b.disabled = false;
+    }
+    $('main').addEventListener('click', () => run('main'));
+    $('worker').addEventListener('click', () => run('worker'));
+  </script>
+</body>
+</html>

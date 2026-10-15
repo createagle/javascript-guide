@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 23-2 · Start: Match Answers to Requests</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 23-2">
+    <script type="text/plain" class="code">
+      // The worker: it runs methods by name and answers each request when it is done,
+      // so answers can come back in a different order than the requests went out.
+      const WORKER_SOURCE = `
+        const methods = {
+          add: (a, b) => a + b,
+          reverse: (text) => [...text].reverse().join(''),
+          fail: () => { throw new Error('This method always fails'); },
+        };
+        onmessage = async ({ data: { id, method, params } }) => {
+          await new Promise((resolve) => setTimeout(resolve, Math.random() * 40));
+          try {
+            postMessage({ id, result: methods[method](...params) });
+          } catch (error) {
+            postMessage({ id, error: error.message });
+          }
+        };
+      `;
+      const worker = new Worker(URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'text/javascript' })));
+
+      // createClient(worker) returns call(method, ...params), which resolves with that request's
+      // result or rejects with its error. Several calls can be in flight at once.
+      // The worker sends back the id it was given: use it to find the right promise.
+      function createClient(worker) {
+        let waiting = null;
+        worker.addEventListener('message', ({ data }) => waiting?.(data.result));
+        return function call(method, ...params) {
+          return new Promise((resolve) => {
+            waiting = resolve;
+            worker.postMessage({ method, params });
+          });
+        };
+      }
+
+      const call = createClient(worker);
+      console.log(await call('add', 1, 2));
+      console.log(await call('reverse', 'abc'));
+    </script>
+    <script type="text/plain" class="tests">
+      // Fail instead of waiting forever when a call never gets its answer
+      const within = (promise) => Promise.race([promise, new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('No answer within 1 s: some call never got its result')), 1000);
+      })]);
+      test('one call', async () => assert.equal(await within(call('add', 2, 3)), 5));
+      test('calls in flight together get their own answers', async () => {
+        for (let round = 0; round < 5; round++) {
+          assert.deepEqual(await within(Promise.all([call('add', 1, 2), call('reverse', 'abc'), call('add', 10, 20)])), [3, 'cba', 30]);
+        }
+      });
+      test('a failing call rejects with its error', async () => {
+        await assert.rejects(within(call('fail')), /always fails/);
+      });
+      test('a failure does not disturb the others', async () => {
+        const [a, b, c] = await within(Promise.allSettled([call('add', 1, 1), call('fail'), call('reverse', 'xy')]));
+        assert.deepEqual([a.value, b.status, c.value], [2, 'rejected', 'yx']);
+      });
+    </script>
+  </div>
+</body>
+</html>
