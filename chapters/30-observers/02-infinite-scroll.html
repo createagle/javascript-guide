@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>30-2 Infinite Scroll</title>
+  <style>
+    .wrap { display: grid; gap: 8px; width: min(560px, 100%); }
+    .feed { height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; overscroll-behavior: contain; }
+    .feed:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .items { list-style: none; margin: 0; padding: 0; }
+    .items li { display: grid; gap: 2px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--muted); }
+    .items strong { color: var(--fg); text-transform: capitalize; }
+    .sentinel { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 8px; }
+    .stats { margin: 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control"><input type="checkbox" id="fail"> Make the next request fail</label>
+    <label class="control"><input type="checkbox" id="slow"> Slow network</label>
+    <button class="btn" type="button" id="reset">Start over</button>
+  </div>
+  <div class="wrap">
+    <div class="feed" id="feed" tabindex="0" aria-label="Item feed, scroll to load more" aria-busy="false">
+      <ol class="items" id="items"></ol>
+      <div class="sentinel" id="sentinel" role="status"></div>
+    </div>
+    <p class="stats" id="stats"></p>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const PAGE_SIZE = 20, TOTAL = 200;
+    const WORDS = ['amber', 'birch', 'cedar', 'delta', 'ember', 'fjord', 'grove', 'harbor', 'island', 'juniper', 'kestrel', 'lagoon', 'meadow', 'nectar', 'orchid', 'prairie'];
+
+    // A fake API: a page of items after a delay, with a cursor for the next page (null at the end)
+    function fetchPage(cursor) {
+      const fail = $('fail').checked;
+      $('fail').checked = false;
+      return new Promise((resolve, reject) => setTimeout(() => {
+        if (fail) return reject(new Error('Network error'));
+        const items = Array.from({ length: Math.min(PAGE_SIZE, TOTAL - cursor) }, (_, i) => {
+          const n = cursor + i + 1;
+          return { n, title: `${WORDS[n % 16]} ${WORDS[(n * 7 + 3) % 16]}`, lines: 1 + (n * 5) % 3 };
+        });
+        resolve({ items, next: cursor + items.length < TOTAL ? cursor + items.length : null });
+      }, $('slow').checked ? 1500 : 400));
+    }
+
+    let next, loading, requests, run;
+    const visible = new Set();
+
+    function render(item) {
+      const li = document.createElement('li');
+      li.dataset.n = item.n;
+      li.append(Object.assign(document.createElement('strong'), { textContent: `#${item.n} ${item.title}` }),
+        Object.assign(document.createElement('span'), { textContent: ' Lorem ipsum dolor sit amet.'.repeat(item.lines) }));
+      seen.observe(li);
+      return li;
+    }
+
+    async function loadMore() {
+      if (loading || next === null) return;
+      loading = true;
+      const mine = run;                                  // "Start over" during a request makes this one stale
+      requests += 1;
+      showStats();
+      $('feed').setAttribute('aria-busy', 'true');
+      $('sentinel').replaceChildren('Loading…');
+      try {
+        const page = await fetchPage(next);
+        if (mine !== run) return;
+        $('items').append(...page.items.map(render));
+        next = page.next;
+        $('sentinel').replaceChildren(next === null ? `That’s all ${TOTAL} items.` : '');
+        if (next === null) observer.disconnect();       // nothing left to load
+      } catch (error) {
+        if (mine !== run) return;
+        const retry = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: 'Retry' });
+        $('sentinel').replaceChildren(`${error.message}. `, retry);
+      } finally {
+        if (mine === run) {
+          loading = false;
+          $('feed').setAttribute('aria-busy', 'false');
+          showStats();
+          // The observer only reports changes: if the sentinel is still in range, re-observe to get a fresh report
+          if (next !== null && !$('sentinel').querySelector('button')) {
+            observer.unobserve($('sentinel'));
+            observer.observe($('sentinel'));
+          }
+        }
+      }
+    }
+
+    // Load more when the sentinel comes within 300px of the bottom of the feed
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore();
+    }, { root: $('feed'), rootMargin: '0px 0px 300px 0px' });
+
+    // A second observer reports which items are at least half visible
+    const seen = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const n = Number(entry.target.dataset.n);
+        if (entry.isIntersecting) visible.add(n);
+        else visible.delete(n);
+      }
+      showStats();
+    }, { root: $('feed'), threshold: 0.5 });
+
+    function showStats() {
+      const shown = $('items').children.length;
+      const range = visible.size ? `#${Math.min(...visible)}–#${Math.max(...visible)}` : 'none';
+      $('stats').textContent = `${shown} of ${TOTAL} items in the DOM · ${requests} request${requests === 1 ? '' : 's'} · in view: ${range}`;
+    }
+
+    $('sentinel').addEventListener('click', (event) => {
+      if (event.target.closest('button')) loadMore();
+    });
+
+    function start() {
+      run = Symbol('run');
+      next = 0;
+      loading = false;
+      requests = 0;
+      visible.clear();
+      seen.disconnect();
+      $('items').replaceChildren();
+      $('sentinel').replaceChildren();
+      $('feed').scrollTop = 0;
+      $('feed').setAttribute('aria-busy', 'false');
+      observer.disconnect();
+      observer.observe($('sentinel'));
+      showStats();
+    }
+    $('reset').addEventListener('click', start);
+    start();
+  </script>
+</body>
+</html>

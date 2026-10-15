@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 30-3 · Final: Lazy-Load Images</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 30-3" data-mode="dom" data-height="290">
+    <template class="html">
+      <div id="gallery" class="gallery" tabindex="0" aria-label="Photos">
+        <img alt="Photo 1" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(30 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E1%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 2" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(60 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E2%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 3" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(90 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E3%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 4" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(120 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E4%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 5" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(150 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E5%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 6" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(180 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E6%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 7" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(210 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E7%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 8" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(240 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E8%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 9" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(270 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E9%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 10" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(300 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E10%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 11" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(330 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E11%3C/text%3E%3C/svg%3E">
+        <img alt="Photo 12" width="160" height="100" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='hsl(360 60%25 55%25)'/%3E%3Ctext x='80' y='60' font-size='32' text-anchor='middle' fill='white' font-family='sans-serif'%3E12%3C/text%3E%3C/svg%3E">
+      </div>
+      <p id="loaded"></p>
+      <style>
+        .gallery { height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 8px; border: 1px solid #ccc; border-radius: 8px; }
+        .gallery img { flex: none; display: block; width: 160px; height: 100px; background: #e7e5e4; }
+        @media (prefers-color-scheme: dark) { .gallery { border-color: #44403c; } .gallery img { background: #292524; } }
+      </style>
+    </template>
+    <script type="text/plain" class="code">
+      // lazyLoad(root) watches every <img data-src> inside the scrolling element `root`.
+      // When an image comes within 100px of the visible part of root, copy data-src into src,
+      // remove the data-src attribute and stop watching that image. Return the observer.
+      function lazyLoad(root) {
+        const observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const img = entry.target;
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+            observer.unobserve(img);               // loaded once: no need to watch it any more
+          }
+        }, { root, rootMargin: '100px 0px' });      // start loading a little before it scrolls into view
+        for (const img of root.querySelectorAll('img[data-src]')) observer.observe(img);
+        return observer;
+      }
+
+      const gallery = document.querySelector('#gallery');
+      const observer = lazyLoad(gallery);
+
+      // Show how many images have been loaded so far
+      const showLoaded = () => {
+        document.querySelector('#loaded').textContent = `Loaded ${gallery.querySelectorAll('img[src]').length} of 12 images`;
+      };
+      gallery.addEventListener('load', showLoaded, true);   // load does not bubble: listen in the capture phase
+      showLoaded();
+    </script>
+    <script type="text/plain" class="tests">
+      // Observers report after the next rendering update: give them a moment
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 200));
+      const img = (n) => gallery.querySelectorAll('img')[n - 1];
+
+      test('lazyLoad returns an IntersectionObserver', () => {
+        assert.ok(observer instanceof IntersectionObserver);
+      });
+      test('at first only the images in or near view are loaded', async () => {
+        await settle();
+        // 220px of gallery + 100px margin: photos 1–3 start above 320px, photo 4 starts at 330px
+        for (const n of [1, 2, 3]) assert.ok(img(n).hasAttribute('src'), `photo ${n} should be loaded`);
+        for (const n of [4, 12]) assert.ok(!img(n).hasAttribute('src'), `photo ${n} should wait`);
+      });
+      test('scrolling to the end loads the last photos', async () => {
+        gallery.scrollTop = gallery.scrollHeight;
+        await settle();
+        for (const n of [11, 12]) assert.ok(img(n).hasAttribute('src'), `photo ${n} should be loaded`);
+        assert.ok(!img(6).hasAttribute('src'), 'photo 6 was skipped over and should still wait');
+      });
+      test('loaded images lose data-src', () => {
+        assert.ok(!img(1).hasAttribute('data-src'));
+        assert.ok(img(6).hasAttribute('data-src'));
+      });
+    </script>
+  </div>
+</body>
+</html>

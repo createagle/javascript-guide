@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 30-2 · Final: Throttle That Keeps the Last Call</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 30-2">
+    <script type="text/plain" class="code">
+      // throttle(fn, wait) runs fn at most once every `wait` ms:
+      // - the first call runs at once
+      // - calls during the wait are not lost: when the wait is over, fn runs ONCE more with the last arguments
+      // - if nothing was called during the wait, there is no extra call
+      function throttle(fn, wait) {
+        let last = -Infinity, timer, lastArgs, lastThis;
+        return function (...args) {
+          lastArgs = args;
+          lastThis = this;
+          const remaining = wait - (performance.now() - last);
+          if (remaining <= 0) {                                     // the wait is over: run now
+            clearTimeout(timer);
+            timer = undefined;
+            last = performance.now();
+            fn.apply(this, args);
+          } else if (timer === undefined) {                         // too soon: run once more at the end
+            timer = setTimeout(() => {
+              timer = undefined;
+              last = performance.now();
+              fn.apply(lastThis, lastArgs);
+            }, remaining);
+          }
+        };
+      }
+
+      const report = throttle((y) => console.log('scrolled to', y), 100);
+      for (const y of [0, 40, 80, 120]) report(y);   // 0 now, and 120 when the 100 ms are over
+    </script>
+    <script type="text/plain" class="tests">
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      test('the first call runs at once', () => {
+        const calls = [];
+        const t = throttle((v) => calls.push(v), 50);
+        t('a');
+        assert.deepEqual(calls, ['a']);
+      });
+      test('calls during the wait become one call with the last arguments', async () => {
+        const calls = [];
+        const t = throttle((v) => calls.push(v), 50);
+        t(1); t(2); t(3);
+        assert.deepEqual(calls, [1]);
+        await sleep(90);
+        assert.deepEqual(calls, [1, 3]);
+      });
+      test('no extra call when nothing happened during the wait', async () => {
+        const calls = [];
+        const t = throttle((v) => calls.push(v), 30);
+        t(1);
+        await sleep(70);
+        assert.deepEqual(calls, [1]);
+      });
+      test('a steady stream runs about once per wait', async () => {
+        const times = [];
+        const t = throttle(() => times.push(performance.now()), 50);
+        const start = performance.now();
+        while (performance.now() - start < 260) {
+          t();
+          await sleep(5);
+        }
+        await sleep(60);
+        const gaps = times.slice(1).map((time, i) => time - times[i]);
+        assert.ok(times.length >= 5 && times.length <= 7, `ran ${times.length} times`);
+        assert.ok(gaps.every((gap) => gap >= 45), `gaps: ${gaps.map(Math.round).join(', ')}`);
+      });
+      test('keeps this', async () => {
+        const seen = [];
+        const view = { name: 'view', update: throttle(function () { seen.push(this?.name); }, 20) };
+        view.update(); view.update();
+        await sleep(50);
+        assert.deepEqual(seen, ['view', 'view']);
+      });
+    </script>
+  </div>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../../assets/style.css">
+  <script src="../../../assets/playground.js" defer></script>
+  <title>Exercise 30-1 · Start: Debounce with cancel() and flush()</title>
+</head>
+<body class="demo">
+  <div class="playground" data-title="Exercise 30-1">
+    <script type="text/plain" class="code">
+      // debounce(fn, wait) returns a function that runs fn only after it has not been called for `wait` ms,
+      // with the arguments and `this` of the LAST call. It also has two methods:
+      // - cancel() drops the pending call
+      // - flush() runs the pending call right away (and does nothing if none is pending)
+      function debounce(fn, wait) {
+        let timer;
+        return () => {
+          clearTimeout(timer);
+          timer = setTimeout(fn, wait);
+        };
+      }
+
+      const save = debounce((text) => console.log('saving', text), 200);
+      save('h');
+      save('he');
+      save('hello');   // only this one is saved, 200 ms later
+    </script>
+    <script type="text/plain" class="tests">
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      test('runs once, after the calls stop, with the last arguments', async () => {
+        const calls = [];
+        const d = debounce((...args) => calls.push(args), 40);
+        d(1); d(2); d(3, 'x');
+        assert.equal(calls.length, 0);
+        await sleep(80);
+        assert.deepEqual(calls, [[3, 'x']]);
+      });
+      test('each call restarts the wait', async () => {
+        let count = 0;
+        const d = debounce(() => count++, 60);
+        d(); await sleep(35);
+        d(); await sleep(35);
+        assert.equal(count, 0);
+        await sleep(60);
+        assert.equal(count, 1);
+      });
+      test('keeps this', async () => {
+        let seen;
+        const editor = { name: 'editor', save: debounce(function () { seen = this?.name; }, 10) };
+        editor.save();
+        await sleep(40);
+        assert.equal(seen, 'editor');
+      });
+      test('cancel() drops the pending call', async () => {
+        let count = 0;
+        const d = debounce(() => count++, 20);
+        d();
+        d.cancel();
+        await sleep(50);
+        assert.equal(count, 0);
+      });
+      test('flush() runs the pending call now, once', async () => {
+        const calls = [];
+        const d = debounce((v) => calls.push(v), 30);
+        d('draft');
+        d.flush();
+        assert.deepEqual(calls, ['draft']);
+        await sleep(60);
+        d.flush();
+        assert.deepEqual(calls, ['draft']);
+      });
+    </script>
+  </div>
+</body>
+</html>

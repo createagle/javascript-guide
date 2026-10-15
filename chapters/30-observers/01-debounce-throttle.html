@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../../assets/demo.js"></script>
+  <link rel="stylesheet" href="../../assets/style.css">
+  <title>30-1 Debounce and Throttle</title>
+  <style>
+    .board { display: grid; gap: 12px; width: min(760px, 100%); }
+    .pad { height: 120px; display: grid; place-items: center; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 14px; touch-action: none; user-select: none; }
+    .typing { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+    .typing input { flex: 1; min-width: 0; font: inherit; color: var(--fg); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    canvas { width: 100%; display: block; }
+    .lanes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+    .lanes strong { color: var(--fg); font-weight: 600; }
+    .lanes code { color: var(--fg); overflow-wrap: anywhere; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  </style>
+</head>
+<body class="demo">
+  <div class="controls">
+    <label class="control">Wait <input type="range" id="wait" min="100" max="1000" step="50" value="300"> <output id="wait-out" for="wait">300 ms</output></label>
+    <button class="btn" type="button" id="burst">Simulate a burst</button>
+    <button class="btn" type="button" id="clear">Clear</button>
+  </div>
+  <div class="board">
+    <div class="pad" id="pad">Move the pointer here</div>
+    <label class="typing">or type <input id="text" autocomplete="off" placeholder="a search term"></label>
+    <canvas id="timeline" role="img" aria-label="Timeline: each row shows when the events and the three handlers ran"></canvas>
+    <ul class="lanes" id="lanes"></ul>
+  </div>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+
+    function debounce(fn, wait) {
+      let timer;
+      return function (...args) {
+        clearTimeout(timer);                                      // every call restarts the countdown
+        timer = setTimeout(() => fn.apply(this, args), wait);
+      };
+    }
+
+    function throttle(fn, wait) {
+      let last = -Infinity, timer, lastArgs, lastThis;
+      return function (...args) {
+        lastArgs = args;
+        lastThis = this;
+        const remaining = wait - (performance.now() - last);
+        if (remaining <= 0) {                                     // the wait is over: run now
+          clearTimeout(timer);
+          timer = undefined;
+          last = performance.now();
+          fn.apply(this, args);
+        } else if (timer === undefined) {                         // too soon: run once more at the end
+          timer = setTimeout(() => {
+            timer = undefined;
+            last = performance.now();
+            fn.apply(lastThis, lastArgs);
+          }, remaining);
+        }
+      };
+    }
+
+    function rafThrottle(fn) {
+      let frame = 0, lastArgs;
+      return (...args) => {
+        lastArgs = args;
+        if (!frame) {
+          frame = requestAnimationFrame(() => {                   // at most once per frame, right before painting
+            frame = 0;
+            fn(...lastArgs);
+          });
+        }
+      };
+    }
+
+    // ---- The timeline ----
+    const LANES = [
+      { name: 'Every event', color: '--muted' },
+      { name: 'debounce', color: '--accent' },
+      { name: 'throttle', color: '--good' },
+      { name: 'requestAnimationFrame', color: '--warn' },
+    ];
+    const SWEEP = 5000, SPAN = 6000;          // a burst starts a 5 s sweep; 1 s extra for late calls
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    const canvas = $('timeline');
+    const ctx = canvas.getContext('2d');
+    let marks = [], sweepStart = -Infinity, drawing = 0, width = 0;
+
+    const lanes = LANES.map((lane) => {
+      const li = document.createElement('li');
+      const swatch = Object.assign(document.createElement('span'), { className: 'swatch' });
+      swatch.style.background = `var(${lane.color})`;
+      const count = Object.assign(document.createElement('output'), { textContent: '0' });
+      const value = Object.assign(document.createElement('code'), { textContent: '–' });
+      li.append(swatch, Object.assign(document.createElement('strong'), { textContent: lane.name }), ' ran ', count, '× · last value ', value);
+      $('lanes').append(li);
+      return { count, value, calls: 0 };
+    });
+
+    function record(lane, value) {
+      const now = performance.now();
+      if (lane === 0 && now - sweepStart >= SWEEP) {      // a new burst after a quiet sweep: start over
+        sweepStart = now;
+        marks = [];
+      }
+      if (now - sweepStart < SPAN) marks.push({ lane, t: now - sweepStart });
+      lanes[lane].count.textContent = ++lanes[lane].calls;
+      lanes[lane].value.textContent = value;
+      if (!drawing) drawing = requestAnimationFrame(draw);
+    }
+
+    function draw() {
+      drawing = 0;
+      const style = getComputedStyle(document.documentElement);
+      const color = (name) => style.getPropertyValue(name).trim();
+      const ratio = devicePixelRatio || 1;
+      const rowH = 30, height = rowH * LANES.length + 22;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      canvas.style.height = `${height}px`;
+      ctx.scale(ratio, ratio);
+      const x = (t) => (t / SPAN) * width;
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillStyle = color('--muted');
+      ctx.strokeStyle = color('--border');
+      for (let s = 0; s <= SPAN / 1000; s++) {              // one tick per second
+        ctx.fillRect(Math.min(x(s * 1000), width - 1), rowH * LANES.length, 1, 6);
+        if (s > 0 && s < SPAN / 1000) ctx.fillText(`${s} s`, x(s * 1000) - 8, height - 2);
+      }
+      LANES.forEach((lane, i) => {
+        ctx.beginPath();
+        ctx.moveTo(0, rowH * i + rowH - 4.5);
+        ctx.lineTo(width, rowH * i + rowH - 4.5);
+        ctx.stroke();
+      });
+      for (const mark of marks) {
+        ctx.fillStyle = color(LANES[mark.lane].color);
+        ctx.fillRect(x(mark.t), rowH * mark.lane + 6, mark.lane === 0 ? 1 : 3, rowH - 10);
+      }
+      const elapsed = performance.now() - sweepStart;
+      if (elapsed < SPAN) {
+        if (!reduceMotion.matches) {                        // a moving cursor, unless motion is reduced
+          ctx.fillStyle = color('--fg');
+          ctx.globalAlpha = 0.25;
+          ctx.fillRect(x(elapsed), 0, 1, rowH * LANES.length);
+          ctx.globalAlpha = 1;
+        }
+        drawing = requestAnimationFrame(draw);             // keep drawing only while a sweep runs
+      }
+    }
+
+    // Redraw at the new size whenever the canvas box changes width
+    new ResizeObserver(([entry]) => {
+      width = entry.contentRect.width;
+      if (!drawing) drawing = requestAnimationFrame(draw);
+    }).observe(canvas);
+
+    // ---- Wiring: one source of events, four ways to handle it ----
+    let handlers;
+    function makeHandlers() {
+      const wait = Number($('wait').value);
+      const current = {};
+      const only = (lane) => (value) => { if (handlers === current) record(lane, value); };   // ignore calls from old handlers
+      current.debounced = debounce(only(1), wait);
+      current.throttled = throttle(only(2), wait);
+      current.framed = rafThrottle(only(3));
+      handlers = current;
+    }
+    function onEvent(value) {
+      record(0, value);
+      handlers.debounced(value);
+      handlers.throttled(value);
+      handlers.framed(value);
+    }
+    makeHandlers();
+
+    $('pad').addEventListener('pointermove', (event) => onEvent(`${Math.round(event.offsetX)}, ${Math.round(event.offsetY)}`));
+    $('text').addEventListener('input', (event) => onEvent(`'${event.target.value}'`));
+    $('wait').addEventListener('input', () => {
+      $('wait-out').value = `${$('wait').value} ms`;
+      makeHandlers();
+    });
+    $('clear').addEventListener('click', () => {
+      makeHandlers();
+      marks = [];
+      sweepStart = -Infinity;
+      for (const lane of lanes) {
+        lane.calls = 0;
+        lane.count.textContent = '0';
+        lane.value.textContent = '–';
+      }
+      if (!drawing) drawing = requestAnimationFrame(draw);
+    });
+    $('burst').addEventListener('click', () => {
+      // 40 events, 40 ms apart, with two pauses: like someone typing a word, stopping, typing again
+      let n = 0;
+      const tick = () => {
+        n += 1;
+        onEvent(`burst ${n}`);
+        if (n < 40) setTimeout(tick, n === 15 || n === 28 ? 700 : 40);
+      };
+      tick();
+    });
+  </script>
+</body>
+</html>
